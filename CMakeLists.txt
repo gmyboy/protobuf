@@ -145,7 +145,7 @@ add_definitions(-DGOOGLE_PROTOBUF_CMAKE_BUILD)
 if (protobuf_DISABLE_RTTI)
   add_definitions(-DGOOGLE_PROTOBUF_NO_RTTI=1)
 endif()
-
+message(STATUS 1.${CMAKE_CURRENT_BINARY_DIR}/cmaketest.map)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/cmaketest.map
 "{
   global:
@@ -171,6 +171,8 @@ endif()
 file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/cmaketest.map)
 
 find_package(Threads REQUIRED)
+
+message(STATUS 2.${Threads_FOUND})
 
 # We can install dependencies from submodules if we're running
 # CMake v3.13 or newer.

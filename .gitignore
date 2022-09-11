@@ -208,3 +208,6 @@ BenchmarkDotNet.Artifacts/
 # Clangd uses these common ephemeral files
 .cache
 compile_commands.json
+
+# build temp file
+build
