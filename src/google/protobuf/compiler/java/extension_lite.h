@@ -31,11 +31,10 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_EXTENSION_LITE_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_EXTENSION_LITE_H__
 
-#include <map>
 #include <string>
 
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/compiler/java/extension.h>
+#include "google/protobuf/compiler/java/extension.h"
+#include "google/protobuf/port.h"
 
 namespace google {
 namespace protobuf {

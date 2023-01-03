@@ -1,8 +1,7 @@
 load("@bazel_skylib//lib:versions.bzl", "versions")
-load("@bazel_skylib//lib:collections.bzl", "collections")
-load("@rules_cc//cc:defs.bzl", "cc_library", "objc_library")
+load("@rules_cc//cc:defs.bzl", "objc_library")
 load("@rules_proto//proto:defs.bzl", "ProtoInfo")
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_library")
 
 def _GetPath(ctx, path):
     if ctx.label.workspace_root:
@@ -41,13 +40,14 @@ def _SourceDir(ctx):
 def _ObjcBase(srcs):
     return [
         "".join([token.capitalize() for token in src[:-len(".proto")].split("_")])
-    for src in srcs]
+        for src in srcs
+    ]
 
 def _ObjcHdrs(srcs):
-    return[src + ".pbobjc.h" for src in _ObjcBase(srcs)]
+    return [src + ".pbobjc.h" for src in _ObjcBase(srcs)]
 
 def _ObjcSrcs(srcs):
-    return[src + ".pbobjc.m" for src in _ObjcBase(srcs)]
+    return [src + ".pbobjc.m" for src in _ObjcBase(srcs)]
 
 def _ObjcOuts(srcs, out_type):
     if out_type == "hdrs":
@@ -68,7 +68,8 @@ def _RubyOuts(srcs):
 def _CsharpOuts(srcs):
     return [
         "".join([token.capitalize() for token in src[:-len(".proto")].split("_")]) + ".cs"
-    for src in srcs]
+        for src in srcs
+    ]
 
 ProtoGenInfo = provider(
     fields = ["srcs", "import_flags", "deps"],
@@ -97,7 +98,7 @@ def _proto_gen_impl(ctx):
 
     if ctx.attr.includes:
         for include in ctx.attr.includes:
-            import_flags += ["-I"+_GetPath(ctx,include)]
+            import_flags += ["-I" + _GetPath(ctx, include)]
 
     import_flags = depset(direct = import_flags)
 
@@ -150,6 +151,7 @@ def _proto_gen_impl(ctx):
                 outs.extend(_PyOuts([src.basename], use_grpc_plugin = use_grpc_plugin))
             elif lang == "ruby":
                 outs.extend(_RubyOuts([src.basename]))
+
             # Otherwise, rely on user-supplied outs.
             args += [("--%s_out=" + path_tpl) % (lang, gen_dir)]
 
@@ -262,7 +264,7 @@ _proto_gen = rule(
         "langs": attr.string_list(),
         "outs": attr.string_list(),
         "out_type": attr.string(
-            default = "all"
+            default = "all",
         ),
     },
     output_to_genfiles = True,
@@ -326,7 +328,7 @@ internal_gen_well_known_protos_java = rule(
         "_protoc": attr.label(
             executable = True,
             cfg = "exec",
-            default = "@com_google_protobuf//:protoc",
+            default = "//:protoc",
         ),
     },
 )
@@ -400,8 +402,8 @@ def internal_objc_proto_library(
         outs = [],
         proto_deps = [],
         includes = ["."],
-        default_runtime = "@com_google_protobuf//:protobuf_objc",
-        protoc = "@com_google_protobuf//:protoc",
+        default_runtime = Label("//:protobuf_objc"),
+        protoc = Label("//:protoc"),
         testonly = None,
         visibility = ["//visibility:public"],
         **kwargs):
@@ -483,6 +485,15 @@ def internal_objc_proto_library(
         **kwargs
     )
 
+# When canonical labels are in use, use additional "@" prefix
+_canonical_label_prefix = "@" if str(Label("//:protoc")).startswith("@@") else ""
+
+def _to_label(label_str):
+    """Converts a string to a label using the repository of the calling thread"""
+    if type(label_str) == type(Label("//:foo")):
+        return label_str
+    return Label(_canonical_label_prefix + native.repository_name() + "//" + native.package_name() + ":foo").relative(label_str)
+
 def internal_py_proto_library(
         name,
         srcs = [],
@@ -490,8 +501,8 @@ def internal_py_proto_library(
         py_libs = [],
         py_extra_srcs = [],
         include = None,
-        default_runtime = "@com_google_protobuf//:protobuf_python",
-        protoc = "@com_google_protobuf//:protoc",
+        default_runtime = Label("//:protobuf_python"),
+        protoc = Label("//:protoc"),
         use_grpc_plugin = False,
         testonly = None,
         **kargs):
@@ -544,8 +555,12 @@ def internal_py_proto_library(
         plugin_language = "grpc",
     )
 
-    if default_runtime and not default_runtime in py_libs + deps:
-        py_libs = py_libs + [default_runtime]
+    if default_runtime:
+        # Resolve non-local labels
+        labels = [_to_label(lib) for lib in py_libs + deps]
+        if not _to_label(default_runtime) in labels:
+            py_libs = py_libs + [default_runtime]
+
     py_library(
         name = name,
         testonly = testonly,
@@ -578,7 +593,7 @@ def _source_proto_library(
         outs = [],
         lang = None,
         includes = ["."],
-        protoc = "@com_google_protobuf//:protoc",
+        protoc = Label("//:protoc"),
         testonly = None,
         visibility = ["//visibility:public"],
         **kwargs):
@@ -642,7 +657,7 @@ def _source_proto_library(
 
     native.filegroup(
         name = name,
-        srcs = [":%s_genproto"%name],
+        srcs = [":%s_genproto" % name],
         testonly = testonly,
         visibility = visibility,
         **kwargs

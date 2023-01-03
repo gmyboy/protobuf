@@ -19,6 +19,14 @@ endif()
 if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW)
 endif()
+# Honor visibility properties for all target types.
+if(POLICY CMP0063)
+  cmake_policy(SET CMP0063 NEW)
+endif()
+# option() honor variables
+if (POLICY CMP0077)
+  cmake_policy(SET CMP0077 NEW)
+endif (POLICY CMP0077)
 
 # Project
 project(protobuf C CXX)
@@ -94,6 +102,20 @@ include(${protobuf_SOURCE_DIR}/cmake/protobuf-options.cmake)
 if (protobuf_BUILD_SHARED_LIBS)
   # This is necessary for linking in Abseil.
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+  # Build Abseil as shared libraries to avoid ODR violations.
+  set(BUILD_SHARED_LIBS ON)
+
+  # Output directory is correct by default for most build setups. However, when
+  # building Protobuf as a DLL, it is important to have the DLL in the same
+  # directory as the executable using it. Thus, we put all binaries in a single
+  # /bin directory.
+  if (MSVC)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_PDB_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+  endif ()
 endif ()
 
 # Version metadata
@@ -218,7 +240,7 @@ if (NOT MSVC)
   check_cxx_source_compiles("
     #include <atomic>
     int main() {
-      return std::atomic<int64_t>{};
+      return static_cast<int>(std::atomic<int64_t>{});
     }
   " protobuf_HAVE_BUILTIN_ATOMICS)
   if (NOT protobuf_HAVE_BUILTIN_ATOMICS)
@@ -323,6 +345,7 @@ set_property(CACHE protobuf_ABSL_PROVIDER PROPERTY STRINGS "module" "package")
 include(${protobuf_SOURCE_DIR}/cmake/abseil-cpp.cmake)
 
 if (protobuf_BUILD_PROTOBUF_BINARIES)
+  include(${protobuf_SOURCE_DIR}/cmake/utf8_range.cmake)
   include(${protobuf_SOURCE_DIR}/cmake/libprotobuf-lite.cmake)
   if (NOT DEFINED protobuf_LIB_PROTOBUF_LITE)
     set(protobuf_LIB_PROTOBUF_LITE libprotobuf-lite)

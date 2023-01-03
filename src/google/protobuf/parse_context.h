@@ -36,21 +36,25 @@
 #include <string>
 #include <type_traits>
 
-#include <google/protobuf/io/coded_stream.h>
-#include <google/protobuf/io/zero_copy_stream.h>
-#include <google/protobuf/arena.h>
-#include <google/protobuf/port.h>
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/stubs/logging.h"
+#include "absl/strings/internal/resize_uninitialized.h"
 #include "absl/strings/string_view.h"
-#include <google/protobuf/arenastring.h>
-#include <google/protobuf/endian.h>
-#include <google/protobuf/implicit_weak_message.h>
-#include <google/protobuf/inlined_string_field.h>
-#include <google/protobuf/metadata_lite.h>
-#include <google/protobuf/repeated_field.h>
-#include <google/protobuf/wire_format_lite.h>
+#include "google/protobuf/arena.h"
+#include "google/protobuf/arenastring.h"
+#include "google/protobuf/endian.h"
+#include "google/protobuf/implicit_weak_message.h"
+#include "google/protobuf/inlined_string_field.h"
+#include "google/protobuf/io/coded_stream.h"
+#include "google/protobuf/io/zero_copy_stream.h"
+#include "google/protobuf/metadata_lite.h"
+#include "google/protobuf/port.h"
+#include "google/protobuf/repeated_field.h"
+#include "google/protobuf/wire_format_lite.h"
+
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 
 namespace google {
@@ -117,7 +121,7 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
       : aliasing_(enable_aliasing ? kOnPatch : kNoAliasing) {}
 
   void BackUp(const char* ptr) {
-    GOOGLE_DCHECK(ptr <= buffer_end_ + kSlopBytes);
+    GOOGLE_ABSL_DCHECK(ptr <= buffer_end_ + kSlopBytes);
     int count;
     if (next_chunk_ == buffer_) {
       count = static_cast<int>(buffer_end_ + kSlopBytes - ptr);
@@ -129,7 +133,7 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
 
   // If return value is negative it's an error
   PROTOBUF_NODISCARD int PushLimit(const char* ptr, int limit) {
-    GOOGLE_DCHECK(limit >= 0 && limit <= INT_MAX - kSlopBytes);
+    GOOGLE_ABSL_DCHECK(limit >= 0 && limit <= INT_MAX - kSlopBytes);
     // This add is safe due to the invariant above, because
     // ptr - buffer_end_ <= kSlopBytes.
     limit += static_cast<int>(ptr - buffer_end_);
@@ -157,7 +161,13 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
   PROTOBUF_NODISCARD const char* ReadString(const char* ptr, int size,
                                             std::string* s) {
     if (size <= buffer_end_ + kSlopBytes - ptr) {
-      s->assign(ptr, size);
+      // Fundamentally we just want to do assign to the string.
+      // However micro-benchmarks regress on string reading cases. So we copy
+      // the same logic from the old CodedInputStream ReadString. Note: as of
+      // Apr 2021, this is still a significant win over `assign()`.
+      absl::strings_internal::STLStringResizeUninitialized(s, size);
+      char* z = &(*s)[0];
+      memcpy(z, ptr, size);
       return ptr + size;
     }
     return ReadStringFallback(ptr, size, s);
@@ -217,10 +227,10 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
   // reached. It aligns *ptr across buffer seams.
   // If limit is exceeded it returns true and ptr is set to null.
   bool DoneWithCheck(const char** ptr, int d) {
-    GOOGLE_DCHECK(*ptr);
+    GOOGLE_ABSL_DCHECK(*ptr);
     if (PROTOBUF_PREDICT_TRUE(*ptr < limit_end_)) return false;
     int overrun = static_cast<int>(*ptr - buffer_end_);
-    GOOGLE_DCHECK_LE(overrun, kSlopBytes);  // Guaranteed by parse loop.
+    GOOGLE_ABSL_DCHECK_LE(overrun, kSlopBytes);  // Guaranteed by parse loop.
     if (overrun ==
         limit_) {  //  No need to flip buffers if we ended on a limit.
       // If we actually overrun the buffer and next_chunk_ is null. It means
@@ -242,7 +252,9 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
       if (aliasing_ == kOnPatch) aliasing_ = kNoDelta;
       return flat.data();
     } else {
-      std::memcpy(buffer_, flat.data(), flat.size());
+      if (!flat.empty()) {
+        std::memcpy(buffer_, flat.data(), flat.size());
+      }
       limit_ = 0;
       limit_end_ = buffer_end_ = buffer_ + flat.size();
       next_chunk_ = nullptr;
@@ -329,9 +341,9 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
 
   template <typename A>
   const char* AppendSize(const char* ptr, int size, const A& append) {
-    int chunk_size = buffer_end_ + kSlopBytes - ptr;
+    int chunk_size = static_cast<int>(buffer_end_ + kSlopBytes - ptr);
     do {
-      GOOGLE_DCHECK(size > chunk_size);
+      GOOGLE_ABSL_DCHECK(size > chunk_size);
       if (next_chunk_ == nullptr) return nullptr;
       append(ptr, chunk_size);
       ptr += chunk_size;
@@ -343,7 +355,7 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
       ptr = Next();
       if (ptr == nullptr) return nullptr;  // passed the limit
       ptr += kSlopBytes;
-      chunk_size = buffer_end_ + kSlopBytes - ptr;
+      chunk_size = static_cast<int>(buffer_end_ + kSlopBytes - ptr);
     } while (size > chunk_size);
     append(ptr, size);
     return ptr + size;
@@ -365,7 +377,7 @@ class PROTOBUF_EXPORT EpsCopyInputStream {
       ptr += kSlopBytes;
     }
     auto end = buffer_end_ + limit_;
-    GOOGLE_DCHECK(end >= ptr);
+    GOOGLE_ABSL_DCHECK(end >= ptr);
     append(ptr, end - ptr);
     return end;
   }
@@ -435,7 +447,9 @@ class PROTOBUF_EXPORT ParseContext : public EpsCopyInputStream {
       MessageLite* msg, const char* ptr, const Table* table) {
     int old;
     ptr = ReadSizeAndPushLimitAndDepthInlined(ptr, &old);
+    auto old_depth = depth_;
     ptr = ptr ? TcParser::ParseLoop(msg, ptr, this, table) : nullptr;
+    if (ptr != nullptr) GOOGLE_ABSL_DCHECK_EQ(old_depth, depth_);
     depth_++;
     if (!PopLimit(old)) return nullptr;
     return ptr;
@@ -446,7 +460,13 @@ class PROTOBUF_EXPORT ParseContext : public EpsCopyInputStream {
       T* msg, const char* ptr, uint32_t tag) {
     if (--depth_ < 0) return nullptr;
     group_depth_++;
+    auto old_depth = depth_;
+    auto old_group_depth = group_depth_;
     ptr = msg->_InternalParse(ptr, this);
+    if (ptr != nullptr) {
+      GOOGLE_ABSL_DCHECK_EQ(old_depth, depth_);
+      GOOGLE_ABSL_DCHECK_EQ(old_group_depth, group_depth_);
+    }
     group_depth_--;
     depth_++;
     if (PROTOBUF_PREDICT_FALSE(!ConsumeEndGroup(tag))) return nullptr;
@@ -458,7 +478,13 @@ class PROTOBUF_EXPORT ParseContext : public EpsCopyInputStream {
       MessageLite* msg, const char* ptr, uint32_t tag, const Table* table) {
     if (--depth_ < 0) return nullptr;
     group_depth_++;
+    auto old_depth = depth_;
+    auto old_group_depth = group_depth_;
     ptr = TcParser::ParseLoop(msg, ptr, this, table);
+    if (ptr != nullptr) {
+      GOOGLE_ABSL_DCHECK_EQ(old_depth, depth_);
+      GOOGLE_ABSL_DCHECK_EQ(old_group_depth, group_depth_);
+    }
     group_depth_--;
     depth_++;
     if (PROTOBUF_PREDICT_FALSE(!ConsumeEndGroup(tag))) return nullptr;
@@ -565,21 +591,64 @@ inline const char* VarintParseSlow(const char* p, uint32_t res, uint64_t* out) {
   return tmp.first;
 }
 
+#ifdef __aarch64__
+const char* VarintParseSlowArm64(const char* p, uint64_t* out, uint64_t first8);
+const char* VarintParseSlowArm32(const char* p, uint32_t* out, uint64_t first8);
+
+inline const char* VarintParseSlowArm(const char* p, uint32_t* out,
+                                      uint64_t first8) {
+  return VarintParseSlowArm32(p, out, first8);
+}
+
+inline const char* VarintParseSlowArm(const char* p, uint64_t* out,
+                                      uint64_t first8) {
+  return VarintParseSlowArm64(p, out, first8);
+}
+
+// Moves data into a register and returns data.  This impacts the compiler's
+// scheduling and instruction selection decisions.
+static PROTOBUF_ALWAYS_INLINE inline uint64_t ForceToRegister(uint64_t data) {
+  asm("" : "+r"(data));
+  return data;
+}
+
+// Performs a 7 bit UBFX (Unsigned Bit Extract) starting at the indicated bit.
+static PROTOBUF_ALWAYS_INLINE inline uint64_t Ubfx7(uint64_t data,
+                                                    uint64_t start) {
+  return ForceToRegister((data >> start) & 0x7f);
+}
+
+#endif  // __aarch64__
+
 template <typename T>
 PROTOBUF_NODISCARD const char* VarintParse(const char* p, T* out) {
+#if defined(__aarch64__) && defined(PROTOBUF_LITTLE_ENDIAN)
+  // This optimization is not supported in big endian mode
+  uint64_t first8;
+  std::memcpy(&first8, p, sizeof(first8));
+  if (PROTOBUF_PREDICT_TRUE((first8 & 0x80) == 0)) {
+    *out = static_cast<uint8_t>(first8);
+    return p + 1;
+  }
+  if (PROTOBUF_PREDICT_TRUE((first8 & 0x8000) == 0)) {
+    uint64_t chunk1;
+    uint64_t chunk2;
+    // Extracting the two chunks this way gives a speedup for this path.
+    chunk1 = Ubfx7(first8, 0);
+    chunk2 = Ubfx7(first8, 8);
+    *out = chunk1 | (chunk2 << 7);
+    return p + 2;
+  }
+  return VarintParseSlowArm(p, out, first8);
+#else   // __aarch64__
   auto ptr = reinterpret_cast<const uint8_t*>(p);
   uint32_t res = ptr[0];
-  if (!(res & 0x80)) {
+  if ((res & 0x80) == 0) {
     *out = res;
     return p + 1;
   }
-  uint32_t byte = ptr[1];
-  res += (byte - 1) << 7;
-  if (!(byte & 0x80)) {
-    *out = res;
-    return p + 2;
-  }
   return VarintParseSlow(p, res, out);
+#endif  // __aarch64__
 }
 
 // Used for tags, could read up to 5 bytes which must be available.
@@ -782,7 +851,9 @@ PROTOBUF_NODISCARD const char* ParseContext::ParseMessage(T* msg,
   int old;
   ptr = ReadSizeAndPushLimitAndDepth(ptr, &old);
   if (ptr == nullptr) return ptr;
+  auto old_depth = depth_;
   ptr = msg->_InternalParse(ptr, this);
+  if (ptr != nullptr) GOOGLE_ABSL_DCHECK_EQ(old_depth, depth_);
   depth_++;
   if (!PopLimit(old)) return nullptr;
   return ptr;
@@ -818,7 +889,7 @@ const char* EpsCopyInputStream::ReadRepeatedFixed(const char* ptr,
 #define GOOGLE_PROTOBUF_ASSERT_RETURN(predicate, ret) \
   if (!(predicate)) {                                  \
     /*  ::raise(SIGINT);  */                           \
-    /*  GOOGLE_LOG(ERROR) << "Parse failure";  */             \
+    /*  GOOGLE_ABSL_LOG(ERROR) << "Parse failure";  */        \
     return ret;                                        \
   }
 
@@ -829,7 +900,7 @@ template <typename T>
 const char* EpsCopyInputStream::ReadPackedFixed(const char* ptr, int size,
                                                 RepeatedField<T>* out) {
   GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
-  int nbytes = buffer_end_ + kSlopBytes - ptr;
+  int nbytes = static_cast<int>(buffer_end_ + kSlopBytes - ptr);
   while (size > nbytes) {
     int num = nbytes / sizeof(T);
     int old_entries = out->size();
@@ -847,14 +918,16 @@ const char* EpsCopyInputStream::ReadPackedFixed(const char* ptr, int size,
     ptr = Next();
     if (ptr == nullptr) return nullptr;
     ptr += kSlopBytes - (nbytes - block_size);
-    nbytes = buffer_end_ + kSlopBytes - ptr;
+    nbytes = static_cast<int>(buffer_end_ + kSlopBytes - ptr);
   }
   int num = size / sizeof(T);
+  int block_size = num * sizeof(T);
+  if (num == 0) return size == block_size ? ptr : nullptr;
   int old_entries = out->size();
   out->Reserve(old_entries + num);
-  int block_size = num * sizeof(T);
   auto dst = out->AddNAlreadyReserved(num);
 #ifdef PROTOBUF_LITTLE_ENDIAN
+  GOOGLE_ABSL_CHECK(dst != nullptr) << out << "," << num;
   std::memcpy(dst, ptr, block_size);
 #else
   for (int i = 0; i < num; i++) dst[i] = UnalignedLoad<T>(ptr + i * sizeof(T));
@@ -879,32 +952,32 @@ template <typename Add>
 const char* EpsCopyInputStream::ReadPackedVarint(const char* ptr, Add add) {
   int size = ReadSize(&ptr);
   GOOGLE_PROTOBUF_PARSER_ASSERT(ptr);
-  int chunk_size = buffer_end_ - ptr;
+  int chunk_size = static_cast<int>(buffer_end_ - ptr);
   while (size > chunk_size) {
     ptr = ReadPackedVarintArray(ptr, buffer_end_, add);
     if (ptr == nullptr) return nullptr;
-    int overrun = ptr - buffer_end_;
-    GOOGLE_DCHECK(overrun >= 0 && overrun <= kSlopBytes);
+    int overrun = static_cast<int>(ptr - buffer_end_);
+    GOOGLE_ABSL_DCHECK(overrun >= 0 && overrun <= kSlopBytes);
     if (size - chunk_size <= kSlopBytes) {
       // The current buffer contains all the information needed, we don't need
       // to flip buffers. However we must parse from a buffer with enough space
       // so we are not prone to a buffer overflow.
       char buf[kSlopBytes + 10] = {};
       std::memcpy(buf, buffer_end_, kSlopBytes);
-      GOOGLE_CHECK_LE(size - chunk_size, kSlopBytes);
+      GOOGLE_ABSL_CHECK_LE(size - chunk_size, kSlopBytes);
       auto end = buf + (size - chunk_size);
       auto res = ReadPackedVarintArray(buf + overrun, end, add);
       if (res == nullptr || res != end) return nullptr;
       return buffer_end_ + (res - buf);
     }
     size -= overrun + chunk_size;
-    GOOGLE_DCHECK_GT(size, 0);
+    GOOGLE_ABSL_DCHECK_GT(size, 0);
     // We must flip buffers
     if (limit_ <= kSlopBytes) return nullptr;
     ptr = Next();
     if (ptr == nullptr) return nullptr;
     ptr += overrun;
-    chunk_size = buffer_end_ - ptr;
+    chunk_size = static_cast<int>(buffer_end_ - ptr);
   }
   auto end = ptr + size;
   ptr = ReadPackedVarintArray(ptr, end, add);
@@ -955,7 +1028,7 @@ PROTOBUF_NODISCARD const char* FieldParser(uint64_t tag, T& field_parser,
       break;
     }
     case WireType::WIRETYPE_END_GROUP: {
-      GOOGLE_LOG(FATAL) << "Can't happen";
+      GOOGLE_ABSL_LOG(FATAL) << "Can't happen";
       break;
     }
     case WireType::WIRETYPE_FIXED32: {
@@ -1066,6 +1139,6 @@ PROTOBUF_NODISCARD PROTOBUF_EXPORT const char* UnknownFieldParse(
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_PARSE_CONTEXT_H__

@@ -31,7 +31,8 @@
 // Author: kenton@google.com (Kenton Varda)
 // emulates google3/file/base/file.cc
 
-#include <google/protobuf/testing/file.h>
+#include "google/protobuf/testing/file.h"
+
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -45,8 +46,9 @@
 #endif
 #include <errno.h>
 
-#include <google/protobuf/io/io_win32.h>
-#include <google/protobuf/stubs/logging.h>
+#include "absl/strings/string_view.h"
+#include "google/protobuf/io/io_win32.h"
+#include "google/protobuf/stubs/logging.h"
 
 namespace google {
 namespace protobuf {
@@ -91,7 +93,7 @@ void File::ReadFileToStringOrDie(const std::string& name, std::string* output) {
   GOOGLE_CHECK(ReadFileToString(name, output)) << "Could not read: " << name;
 }
 
-bool File::WriteStringToFile(const std::string& contents,
+bool File::WriteStringToFile(absl::string_view contents,
                              const std::string& name) {
   FILE* file = fopen(name.c_str(), "wb");
   if (file == NULL) {
@@ -111,7 +113,7 @@ bool File::WriteStringToFile(const std::string& contents,
   return true;
 }
 
-void File::WriteStringToFileOrDie(const std::string& contents,
+void File::WriteStringToFileOrDie(absl::string_view contents,
                                   const std::string& name) {
   FILE* file = fopen(name.c_str(), "wb");
   GOOGLE_CHECK(file != NULL)

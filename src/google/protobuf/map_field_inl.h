@@ -34,13 +34,13 @@
 #include <memory>
 
 #include "absl/base/casts.h"
-#include <google/protobuf/map.h>
-#include <google/protobuf/map_field.h>
-#include <google/protobuf/map_type_handler.h>
-#include <google/protobuf/port.h>
+#include "google/protobuf/map.h"
+#include "google/protobuf/map_field.h"
+#include "google/protobuf/map_type_handler.h"
+#include "google/protobuf/port.h"
 
 // must be last
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
@@ -142,7 +142,7 @@ template <typename Key, typename T>
 void TypeDefinedMapFieldBase<Key, T>::InitializeIterator(
     MapIterator* map_iter) const {
   map_iter->iter_ = new typename Map<Key, T>::const_iterator;
-  GOOGLE_CHECK(map_iter->iter_ != nullptr);
+  GOOGLE_ABSL_CHECK(map_iter->iter_ != nullptr);
 }
 
 template <typename Key, typename T>
@@ -345,7 +345,7 @@ void MapField<Derived, Key, T, kKeyFieldType,
   RepeatedPtrField<EntryType>* repeated_field =
       reinterpret_cast<RepeatedPtrField<EntryType>*>(
           this->MapFieldBase::repeated_field_);
-  GOOGLE_CHECK(this->MapFieldBase::repeated_field_ != nullptr);
+  GOOGLE_ABSL_CHECK(this->MapFieldBase::repeated_field_ != nullptr);
   map->clear();
   for (typename RepeatedPtrField<EntryType>::iterator it =
            repeated_field->begin();
@@ -376,6 +376,6 @@ size_t MapField<Derived, Key, T, kKeyFieldType,
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_MAP_FIELD_INL_H__

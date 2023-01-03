@@ -41,11 +41,11 @@
 #include <cstdint>
 #include <type_traits>
 
-#include <google/protobuf/message_lite.h>
-#include <google/protobuf/parse_context.h>
+#include "google/protobuf/message_lite.h"
+#include "google/protobuf/parse_context.h"
 
 // Must come last:
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -85,6 +85,27 @@ struct TcFieldData {
   uint8_t hasbit_idx() const { return static_cast<uint8_t>(data >> 16); }
   uint8_t aux_idx() const { return static_cast<uint8_t>(data >> 24); }
   uint16_t offset() const { return static_cast<uint16_t>(data >> 48); }
+
+  // Constructor for special entries that do not represent a field.
+  //  - End group: `nonfield_info` is the decoded tag.
+  constexpr TcFieldData(uint16_t coded_tag, uint16_t nonfield_info)
+      : data(uint64_t{nonfield_info} << 16 |  //
+             uint64_t{coded_tag}) {}
+
+  // Fields used in non-field entries
+  //
+  //     Bit:
+  //     +-----------+-------------------+
+  //     |63    ..     32|31     ..     0|
+  //     +---------------+---------------+
+  //     :   .   :   .   :   . 16|=======| [16] coded_tag()
+  //     :   .   :   . 32|=======|   .   : [16] decoded_tag()
+  //     :---.---:---.---:   .   :   .   : [32] (unused)
+  //     +-----------+-------------------+
+  //     |63    ..     32|31     ..     0|
+  //     +---------------+---------------+
+
+  uint16_t decoded_tag() const { return static_cast<uint16_t>(data >> 16); }
 
   // Fields used in mini table parsing:
   //
@@ -266,6 +287,9 @@ struct alignas(uint64_t) TcParseTableBase {
     const MessageLite* message_default() const {
       return static_cast<const MessageLite*>(message_default_p);
     }
+    const MessageLite* message_default_weak() const {
+      return *static_cast<const MessageLite* const*>(message_default_p);
+    }
   };
   const FieldAux* field_aux(uint32_t idx) const {
     return reinterpret_cast<const FieldAux*>(reinterpret_cast<uintptr_t>(this) +
@@ -323,7 +347,7 @@ struct TcParseTable {
   // Entries for all fields:
   std::array<TcParseTableBase::FieldEntry, kNumFieldEntries> field_entries;
   std::array<TcParseTableBase::FieldAux, kNumFieldAux> aux_entries;
-  std::array<char, kNameTableSize> field_names;
+  std::array<char, kNameTableSize == 0 ? 1 : kNameTableSize> field_names;
 };
 
 // Partial specialization: if there are no aux entries, there will be no array.
@@ -339,7 +363,7 @@ struct TcParseTable<kFastTableSizeLog2, kNumFieldEntries, 0, kNameTableSize,
       fast_entries;
   std::array<uint16_t, kFieldLookupSize> field_lookup_table;
   std::array<TcParseTableBase::FieldEntry, kNumFieldEntries> field_entries;
-  std::array<char, kNameTableSize> field_names;
+  std::array<char, kNameTableSize == 0 ? 1 : kNameTableSize> field_names;
 };
 
 // Partial specialization: if there are no fields at all, then we can save space
@@ -351,7 +375,7 @@ struct TcParseTable<0, 0, 0, kNameTableSize, kFieldLookupSize> {
   // The fast parsing loop will always use this entry, so it must be present.
   std::array<TcParseTableBase::FastFieldEntry, 1> fast_entries;
   std::array<uint16_t, kFieldLookupSize> field_lookup_table;
-  std::array<char, kNameTableSize> field_names;
+  std::array<char, kNameTableSize == 0 ? 1 : kNameTableSize> field_names;
 };
 
 static_assert(std::is_standard_layout<TcParseTable<1>>::value,
@@ -365,6 +389,6 @@ static_assert(offsetof(TcParseTable<1>, fast_entries) ==
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_GENERATED_MESSAGE_TCTABLE_DECL_H__

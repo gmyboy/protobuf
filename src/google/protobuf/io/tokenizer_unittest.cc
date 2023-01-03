@@ -32,19 +32,18 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/io/tokenizer.h>
+#include "google/protobuf/io/tokenizer.h"
 
 #include <limits.h>
 #include <math.h>
 
 #include <vector>
 
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/logging.h>
+#include "google/protobuf/stubs/common.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/substitute.h"
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/testing/googletest.h>
+#include "google/protobuf/io/zero_copy_stream_impl.h"
+#include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
 
 namespace google {
@@ -651,10 +650,10 @@ DocCommentCase kDocCommentCases[] = {
      {},
      ""},
 
-    {"prev /* ignored */ next",
+    {"prev /* detached */ next",
 
      "",
-     {},
+     {" detached "},
      ""},
 
     {"prev // trailing comment\n"
@@ -663,6 +662,13 @@ DocCommentCase kDocCommentCases[] = {
      " trailing comment\n",
      {},
      ""},
+
+    {"prev\n"
+     "/* leading comment */ next",
+
+     "",
+     {},
+     " leading comment "},
 
     {"prev\n"
      "// leading comment\n"
@@ -763,6 +769,45 @@ DocCommentCase kDocCommentCases[] = {
      "",
      {},
      " leading comment\n"},
+
+    {"prev /* many comments*/ /* all inline */ /* will be handled */ next",
+
+     " many comments",
+     {" all inline "},
+     " will be handled "},
+
+    {R"pb(
+     prev /* a single block comment
+         that spans multiple lines
+         is detached if it ends
+         on the same line as next */ next"
+     )pb",
+
+     "",
+     {" a single block comment\n"
+      "that spans multiple lines\n"
+      "is detached if it ends\n"
+      "on the same line as next "},
+     ""},
+
+    {R"pb(
+     prev /* trailing */ /* leading */ next"
+     )pb",
+
+     " trailing ",
+     {},
+     " leading "},
+
+    {R"pb(
+     prev /* multi-line
+          trailing */ /* an oddly
+                      placed detached */ /* an oddly
+                                         placed leading */ next"
+     )pb",
+
+     " multi-line\ntrailing ",
+     {" an oddly\nplaced detached "},
+     " an oddly\nplaced leading "},
 };
 
 TEST_2D(TokenizerTest, DocComments, kDocCommentCases, kBlockSizes) {
@@ -999,6 +1044,8 @@ TEST_F(TokenizerTest, ParseString) {
   EXPECT_EQ("\1x\1\123\739\52\334n\3", output);
   Tokenizer::ParseString("'\\x20\\x4'", &output);
   EXPECT_EQ("\x20\x4", output);
+  Tokenizer::ParseString("'\\X20\\X4'", &output);
+  EXPECT_EQ("\x20\x4", output);
 
   // Test invalid strings that may still be tokenized as strings.
   Tokenizer::ParseString("\"\\a\\l\\v\\t", &output);  // \l is invalid
@@ -1064,7 +1111,7 @@ inline std::ostream& operator<<(std::ostream& out, const ErrorCase& test_case) {
 ErrorCase kErrorCases[] = {
     // String errors.
     {"'\\l' foo", true, "0:2: Invalid escape sequence in string literal.\n"},
-    {"'\\X' foo", true, "0:2: Invalid escape sequence in string literal.\n"},
+    {"'\\X' foo", true, "0:3: Expected hex digits for escape sequence.\n"},
     {"'\\x' foo", true, "0:3: Expected hex digits for escape sequence.\n"},
     {"'foo", false, "0:4: Unexpected end of string.\n"},
     {"'bar\nfoo", true,

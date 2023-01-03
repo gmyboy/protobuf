@@ -36,13 +36,14 @@
 #ifndef GOOGLE_PROTOBUF_PORT_H__
 #define GOOGLE_PROTOBUF_PORT_H__
 
+#include <cassert>
 #include <cstddef>
 #include <new>
 #include <type_traits>
 
 
 // must be last
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 
 namespace google {
@@ -109,10 +110,20 @@ inline ToRef DownCast(From& f) {
   return *static_cast<To*>(&f);
 }
 
+// To prevent sharing cache lines between threads
+#ifdef __cpp_aligned_new
+enum { kCacheAlignment = 64 };
+#else
+enum { kCacheAlignment = alignof(max_align_t) };  // do the best we can
+#endif
+
+// The maximum byte alignment we support.
+enum { kMaxMessageAlignment = 8 };
+
 }  // namespace internal
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_PORT_H__

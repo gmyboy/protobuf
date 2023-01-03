@@ -32,30 +32,31 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/compiler/java/helpers.h>
+#include "google/protobuf/compiler/java/helpers.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <vector>
 
-#include <google/protobuf/wire_format.h>
-#include <google/protobuf/stubs/strutil.h>
 #include "absl/container/flat_hash_set.h"
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/stubs/logging.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
-#include <google/protobuf/stubs/stringprintf.h>
+#include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
-#include <google/protobuf/compiler/java/name_resolver.h>
-#include <google/protobuf/compiler/java/names.h>
-#include <google/protobuf/descriptor.pb.h>
+#include "google/protobuf/compiler/java/name_resolver.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/io/strtod.h"
+#include "google/protobuf/wire_format.h"
 
 // Must be last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -69,75 +70,6 @@ const char kThickSeparator[] =
     "// ===================================================================\n";
 const char kThinSeparator[] =
     "// -------------------------------------------------------------------\n";
-
-namespace {
-const char* DefaultPackage(Options options) {
-  return options.opensource_runtime ? "" : "com.google.protos";
-}
-
-bool IsReservedName(absl::string_view name) {
-  static const auto& kReservedNames =
-      *new absl::flat_hash_set<absl::string_view>({
-          "abstract",   "assert",       "boolean",   "break",      "byte",
-          "case",       "catch",        "char",      "class",      "const",
-          "continue",   "default",      "do",        "double",     "else",
-          "enum",       "extends",      "final",     "finally",    "float",
-          "for",        "goto",         "if",        "implements", "import",
-          "instanceof", "int",          "interface", "long",       "native",
-          "new",        "package",      "private",   "protected",  "public",
-          "return",     "short",        "static",    "strictfp",   "super",
-          "switch",     "synchronized", "this",      "throw",      "throws",
-          "transient",  "try",          "void",      "volatile",   "while",
-      });
-  return kReservedNames.contains(name);
-}
-
-bool IsForbidden(const std::string& field_name) {
-  // Names that should be avoided (in UpperCamelCase format).
-  // Using them will cause the compiler to generate accessors whose names
-  // collide with methods defined in base classes.
-  // Keep this list in sync with specialFieldNames in
-  // java/core/src/main/java/com/google/protobuf/DescriptorMessageInfoFactory.java
-  static const auto& kForbiddenNames =
-      *new absl::flat_hash_set<absl::string_view>({
-        // java.lang.Object:
-          "Class",
-          // com.google.protobuf.MessageLiteOrBuilder:
-          "DefaultInstanceForType",
-          // com.google.protobuf.MessageLite:
-          "ParserForType",
-          "SerializedSize",
-          // com.google.protobuf.MessageOrBuilder:
-          "AllFields",
-          "DescriptorForType",
-          "InitializationErrorString",
-          "UnknownFields",
-          // obsolete. kept for backwards compatibility of generated code
-          "CachedSize",
-      });
-  return kForbiddenNames.contains(UnderscoresToCamelCase(field_name, true));
-}
-
-std::string FieldName(const FieldDescriptor* field) {
-  std::string field_name;
-  // Groups are hacky:  The name of the field is just the lower-cased name
-  // of the group type.  In Java, though, we would like to retain the original
-  // capitalization of the type name.
-  if (GetType(field) == FieldDescriptor::TYPE_GROUP) {
-    field_name = field->message_type()->name();
-  } else {
-    field_name = field->name();
-  }
-  if (IsForbidden(field_name)) {
-    // Append a trailing "#" to indicate that the name should be decorated to
-    // avoid collision with other names.
-    field_name += "#";
-  }
-  return field_name;
-}
-
-
-}  // namespace
 
 void PrintGeneratedAnnotation(io::Printer* printer, char delimiter,
                               const std::string& annotation_file,
@@ -154,11 +86,10 @@ void PrintGeneratedAnnotation(io::Printer* printer, char delimiter,
   printer->Print(ptemplate.c_str(), "annotation_file", annotation_file);
 }
 
-void PrintEnumVerifierLogic(io::Printer* printer,
-                            const FieldDescriptor* descriptor,
-                            const std::map<std::string, std::string>& variables,
-                            const char* var_name,
-                            const char* terminating_string, bool enforce_lite) {
+void PrintEnumVerifierLogic(
+    io::Printer* printer, const FieldDescriptor* descriptor,
+    const absl::flat_hash_map<absl::string_view, std::string>& variables,
+    const char* var_name, const char* terminating_string, bool enforce_lite) {
   std::string enum_verifier_string =
       enforce_lite ? absl::StrCat(var_name, ".internalGetVerifier()")
                    : absl::StrCat(
@@ -177,7 +108,7 @@ void PrintEnumVerifierLogic(io::Printer* printer,
 
 std::string UnderscoresToCamelCase(const std::string& input,
                                    bool cap_next_letter) {
-  GOOGLE_CHECK(!input.empty());
+  GOOGLE_ABSL_CHECK(!input.empty());
   std::string result;
   // Note:  I distrust ctype.h due to locales.
   for (int i = 0; i < input.size(); i++) {
@@ -221,7 +152,7 @@ std::string ToCamelCase(const std::string& input, bool lower_first) {
     if (i == '_') {
       capitalize_next = true;
     } else if (capitalize_next) {
-      result.push_back(ToUpperCh(i));
+      result.push_back(absl::ascii_toupper(i));
       capitalize_next = false;
     } else {
       result.push_back(i);
@@ -230,42 +161,10 @@ std::string ToCamelCase(const std::string& input, bool lower_first) {
 
   // Lower-case the first letter.
   if (lower_first && !result.empty()) {
-    result[0] = ToLowerCh(result[0]);
+    result[0] = absl::ascii_tolower(result[0]);
   }
 
   return result;
-}
-
-char ToUpperCh(char ch) {
-  return (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch;
-}
-
-char ToLowerCh(char ch) {
-  return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
-}
-
-std::string UnderscoresToCamelCase(const FieldDescriptor* field) {
-  return UnderscoresToCamelCase(FieldName(field), false);
-}
-
-std::string UnderscoresToCapitalizedCamelCase(const FieldDescriptor* field) {
-  return UnderscoresToCamelCase(FieldName(field), true);
-}
-
-std::string CapitalizedFieldName(const FieldDescriptor* field) {
-  return UnderscoresToCapitalizedCamelCase(field);
-}
-
-std::string UnderscoresToCamelCase(const MethodDescriptor* method) {
-  return UnderscoresToCamelCase(method->name(), false);
-}
-
-std::string UnderscoresToCamelCaseCheckReserved(const FieldDescriptor* field) {
-  std::string name = UnderscoresToCamelCase(field);
-  if (IsReservedName(name)) {
-    return name + "_";
-  }
-  return name;
 }
 
 // Names that should be avoided as field names in Kotlin.
@@ -298,7 +197,7 @@ std::string EscapeKotlinKeywords(std::string name) {
 }
 
 std::string UniqueFileScopeIdentifier(const Descriptor* descriptor) {
-  return "static_" + StringReplace(descriptor->full_name(), ".", "_", true);
+  return "static_" + absl::StrReplaceAll(descriptor->full_name(), {{".", "_"}});
 }
 
 std::string CamelCaseFieldName(const FieldDescriptor* field) {
@@ -313,53 +212,11 @@ std::string FileClassName(const FileDescriptor* file, bool immutable) {
   return ClassNameResolver().GetFileClassName(file, immutable);
 }
 
-std::string FileJavaPackage(const FileDescriptor* file, bool immutable,
-                            Options options) {
-  std::string result;
-
-  if (file->options().has_java_package()) {
-    result = file->options().java_package();
-  } else {
-    result = DefaultPackage(options);
-    if (!file->package().empty()) {
-      if (!result.empty()) result += '.';
-      result += file->package();
-    }
-  }
-
-  return result;
-}
-
-std::string FileJavaPackage(const FileDescriptor* file, Options options) {
-  return FileJavaPackage(file, true /* immutable */, options);
-}
-
 std::string JavaPackageToDir(std::string package_name) {
-  std::string package_dir = StringReplace(package_name, ".", "/", true);
+  std::string package_dir = absl::StrReplaceAll(package_name, {{".", "/"}});
   if (!package_dir.empty()) package_dir += "/";
   return package_dir;
 }
-
-std::string ClassName(const Descriptor* descriptor) {
-  ClassNameResolver name_resolver;
-  return name_resolver.GetClassName(descriptor, true);
-}
-
-std::string ClassName(const EnumDescriptor* descriptor) {
-  ClassNameResolver name_resolver;
-  return name_resolver.GetClassName(descriptor, true);
-}
-
-std::string ClassName(const ServiceDescriptor* descriptor) {
-  ClassNameResolver name_resolver;
-  return name_resolver.GetClassName(descriptor, true);
-}
-
-std::string ClassName(const FileDescriptor* descriptor) {
-  ClassNameResolver name_resolver;
-  return name_resolver.GetClassName(descriptor, true);
-}
-
 
 std::string ExtraMessageInterfaces(const Descriptor* descriptor) {
   std::string interfaces = "// @@protoc_insertion_point(message_implements:" +
@@ -432,7 +289,7 @@ JavaType GetJavaType(const FieldDescriptor* field) {
       // types are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return JAVATYPE_INT;
 }
 
@@ -461,7 +318,7 @@ const char* PrimitiveTypeName(JavaType type) {
       // JavaTypes are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return NULL;
 }
 
@@ -494,7 +351,7 @@ const char* BoxedPrimitiveTypeName(JavaType type) {
       // JavaTypes are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return NULL;
 }
 
@@ -527,7 +384,7 @@ const char* KotlinTypeName(JavaType type) {
       // JavaTypes are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return NULL;
 }
 
@@ -586,7 +443,7 @@ const char* FieldTypeName(FieldDescriptor::Type field_type) {
       // types are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return NULL;
 }
 
@@ -623,7 +480,7 @@ std::string DefaultValue(const FieldDescriptor* field, bool immutable,
       } else if (value != value) {
         return "Double.NaN";
       } else {
-        return SimpleDtoa(value) + "D";
+        return io::SimpleDtoa(value) + "D";
       }
     }
     case FieldDescriptor::CPPTYPE_FLOAT: {
@@ -635,7 +492,7 @@ std::string DefaultValue(const FieldDescriptor* field, bool immutable,
       } else if (value != value) {
         return "Float.NaN";
       } else {
-        return SimpleFtoa(value) + "F";
+        return io::SimpleFtoa(value) + "F";
       }
     }
     case FieldDescriptor::CPPTYPE_BOOL:
@@ -674,7 +531,7 @@ std::string DefaultValue(const FieldDescriptor* field, bool immutable,
       // types are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return "";
 }
 
@@ -706,7 +563,7 @@ bool IsDefaultValueJavaDefault(const FieldDescriptor* field) {
       // types are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return false;
 }
 
@@ -820,7 +677,7 @@ bool IsReferenceType(JavaType type) {
       // JavaTypes are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return false;
 }
 
@@ -869,7 +726,7 @@ const char* GetCapitalizedType(const FieldDescriptor* field, bool immutable,
       // types are added.
   }
 
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return NULL;
 }
 
@@ -919,7 +776,7 @@ int FixedSize(FieldDescriptor::Type type) {
       // No default because we want the compiler to complain if any new
       // types are added.
   }
-  GOOGLE_LOG(FATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
   return -1;
 }
 
@@ -1055,7 +912,7 @@ int GetExperimentalJavaFieldTypeForPacked(const FieldDescriptor* field) {
   } else if (result > FieldDescriptor::TYPE_BYTES) {
     return result + 30;
   } else {
-    GOOGLE_LOG(FATAL) << field->full_name() << " can't be packed.";
+    GOOGLE_ABSL_LOG(FATAL) << field->full_name() << " can't be packed.";
     return 0;
   }
 }
@@ -1122,7 +979,7 @@ void EscapeUtf16ToString(uint16_t code, std::string* output) {
   } else if (code >= 0x20 && code <= 0x7f) {
     output->push_back(static_cast<char>(code));
   } else {
-    output->append(StringPrintf("\\u%04x", code));
+    output->append(absl::StrFormat("\\u%04x", code));
   }
 }
 
@@ -1131,4 +988,4 @@ void EscapeUtf16ToString(uint16_t code, std::string* output) {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

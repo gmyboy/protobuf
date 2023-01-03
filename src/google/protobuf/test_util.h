@@ -35,17 +35,17 @@
 #ifndef GOOGLE_PROTOBUF_TEST_UTIL_H__
 #define GOOGLE_PROTOBUF_TEST_UTIL_H__
 
-#include <google/protobuf/unittest.pb.h>
+#include "google/protobuf/unittest.pb.h"
 
 #define UNITTEST ::protobuf_unittest
 #define UNITTEST_IMPORT ::protobuf_unittest_import
 // Must be included when the preprocessor symbols above are defined.
-#include <google/protobuf/test_util.inc>
+#include "google/protobuf/test_util.inc"
 #undef UNITTEST
 #undef UNITTEST_IMPORT
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -185,7 +185,7 @@ inline const FieldDescriptor* TestUtil::ReflectionTester::F(
   } else {
     result = base_descriptor_->FindFieldByName(name);
   }
-  GOOGLE_CHECK(result != nullptr);
+  GOOGLE_ABSL_CHECK(result != nullptr);
   return result;
 }
 
@@ -1272,6 +1272,6 @@ inline void ExpectAllFieldsAndExtensionsInOrder(const std::string& serialized) {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_TEST_UTIL_H__

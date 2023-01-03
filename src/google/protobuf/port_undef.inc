@@ -35,6 +35,8 @@
 #error "port_undef.inc must be included after port_def.inc"
 #endif
 
+#undef PROTOBUF_POISON_MEMORY_REGION
+#undef PROTOBUF_UNPOISON_MEMORY_REGION
 #undef PROTOBUF_BUILTIN_BSWAP16
 #undef PROTOBUF_BUILTIN_BSWAP32
 #undef PROTOBUF_BUILTIN_BSWAP64
@@ -88,7 +90,6 @@
 #undef PROTOBUF_THREAD_LOCAL
 #undef PROTOBUF_LITTLE_ENDIAN
 #undef PROTOBUF_BIG_ENDIAN
-#undef PROTOBUF_MESSAGE_OWNED_ARENA_EXPERIMENT
 #undef PROTOBUF_CONSTINIT
 #undef PROTOBUF_CONSTEXPR
 #undef PROTOBUF_ATTRIBUTE_WEAK
@@ -111,6 +112,7 @@
 #undef PROTOBUF_DEBUG
 #undef PROTOBUF_DLOG
 #undef PROTO2_IS_OSS
+#undef PROTOBUF_NO_THREADLOCAL
 
 #ifdef PROTOBUF_FUTURE_BREAKING_CHANGES
 #undef PROTOBUF_FUTURE_BREAKING_CHANGES
@@ -121,12 +123,17 @@
 
 #undef PROTOBUF_FUTURE_FINAL
 
+// Restore macros that may have been #undef'd in port_def.inc.
+
 #ifdef PROTOBUF_DID_UNDEF_PACKAGE
 #pragma pop_macro("PACKAGE")
 #undef PROTOBUF_DID_UNDEF_PACKAGE
 #endif
 
-// Restore macro that may have been #undef'd in port_def.inc.
+#ifdef PROTOBUF_DID_UNDEF_LINUX
+#pragma pop_macro("linux")
+#endif
+
 #ifdef _WIN32
 #pragma pop_macro("CREATE_NEW")
 #pragma pop_macro("DELETE")
@@ -173,6 +180,10 @@
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#endif
+
+#ifdef __clang__
+#pragma clang diagnostic pop
 #endif
 
 // Pop the warning(push) from port_def.inc

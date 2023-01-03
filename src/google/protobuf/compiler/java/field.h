@@ -36,13 +36,13 @@
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_FIELD_H__
 
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/descriptor.h>
+#include "absl/container/flat_hash_map.h"
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/port.h"
 
 namespace google {
 namespace protobuf {
@@ -70,6 +70,8 @@ class ImmutableFieldGenerator {
   ImmutableFieldGenerator& operator=(const ImmutableFieldGenerator&) = delete;
   virtual ~ImmutableFieldGenerator();
 
+  virtual int GetMessageBitIndex() const = 0;
+  virtual int GetBuilderBitIndex() const = 0;
   virtual int GetNumBitsForMessage() const = 0;
   virtual int GetNumBitsForBuilder() const = 0;
   virtual void GenerateInterfaceMembers(io::Printer* printer) const = 0;
@@ -79,9 +81,8 @@ class ImmutableFieldGenerator {
   virtual void GenerateBuilderClearCode(io::Printer* printer) const = 0;
   virtual void GenerateMergingCode(io::Printer* printer) const = 0;
   virtual void GenerateBuildingCode(io::Printer* printer) const = 0;
-  virtual void GenerateParsingCode(io::Printer* printer) const = 0;
-  virtual void GenerateParsingCodeFromPacked(io::Printer* printer) const;
-  virtual void GenerateParsingDoneCode(io::Printer* printer) const = 0;
+  virtual void GenerateBuilderParsingCode(io::Printer* printer) const = 0;
+  virtual void GenerateBuilderParsingCodeFromPacked(io::Printer* printer) const;
   virtual void GenerateSerializationCode(io::Printer* printer) const = 0;
   virtual void GenerateSerializedSizeCode(io::Printer* printer) const = 0;
   virtual void GenerateFieldBuilderInitializationCode(
@@ -134,7 +135,7 @@ class FieldGeneratorMap {
 template <typename FieldGeneratorType>
 inline const FieldGeneratorType& FieldGeneratorMap<FieldGeneratorType>::get(
     const FieldDescriptor* field) const {
-  GOOGLE_CHECK_EQ(field->containing_type(), descriptor_);
+  GOOGLE_ABSL_CHECK_EQ(field->containing_type(), descriptor_);
   return *field_generators_[field->index()];
 }
 
@@ -169,18 +170,19 @@ struct OneofGeneratorInfo {
 };
 
 // Set some common variables used in variable FieldGenerators.
-void SetCommonFieldVariables(const FieldDescriptor* descriptor,
-                             const FieldGeneratorInfo* info,
-                             std::map<std::string, std::string>* variables);
+void SetCommonFieldVariables(
+    const FieldDescriptor* descriptor, const FieldGeneratorInfo* info,
+    absl::flat_hash_map<absl::string_view, std::string>* variables);
 
 // Set some common oneof variables used in OneofFieldGenerators.
-void SetCommonOneofVariables(const FieldDescriptor* descriptor,
-                             const OneofGeneratorInfo* info,
-                             std::map<std::string, std::string>* variables);
+void SetCommonOneofVariables(
+    const FieldDescriptor* descriptor, const OneofGeneratorInfo* info,
+    absl::flat_hash_map<absl::string_view, std::string>* variables);
 
 // Print useful comments before a field's accessors.
-void PrintExtraFieldInfo(const std::map<std::string, std::string>& variables,
-                         io::Printer* printer);
+void PrintExtraFieldInfo(
+    const absl::flat_hash_map<absl::string_view, std::string>& variables,
+    io::Printer* printer);
 
 }  // namespace java
 }  // namespace compiler

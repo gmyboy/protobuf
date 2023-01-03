@@ -28,19 +28,22 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/compiler/python/pyi_generator.h>
+#include "google/protobuf/compiler/python/pyi_generator.h"
 
 #include <string>
 #include <utility>
 
+#include "absl/container/flat_hash_set.h"
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/stubs/logging.h"
 #include "absl/strings/ascii.h"
-#include <google/protobuf/stubs/strutil.h>
+#include "absl/strings/match.h"
 #include "absl/strings/str_split.h"
-#include <google/protobuf/compiler/python/helpers.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/io/printer.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+#include "google/protobuf/compiler/python/helpers.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/io/printer.h"
+#include "google/protobuf/io/zero_copy_stream.h"
 
 namespace google {
 namespace protobuf {
@@ -152,19 +155,21 @@ void CheckImportModules(const Descriptor* descriptor,
 
 void PyiGenerator::PrintImportForDescriptor(
     const FileDescriptor& desc,
-    std::set<std::string>* seen_aliases) const {
+    absl::flat_hash_set<std::string>* seen_aliases) const {
   const std::string& filename = desc.name();
-  std::string module_name = StrippedModuleName(filename);
+  std::string module_name_owned = StrippedModuleName(filename);
+  absl::string_view module_name(module_name_owned);
   size_t last_dot_pos = module_name.rfind('.');
   std::string import_statement;
   if (last_dot_pos == std::string::npos) {
-    import_statement = "import " + module_name;
+    import_statement = absl::StrCat("import ", module_name);
   } else {
-    import_statement = "from " + module_name.substr(0, last_dot_pos) +
-                       " import " + module_name.substr(last_dot_pos + 1);
+    import_statement =
+        absl::StrCat("from ", module_name.substr(0, last_dot_pos), " import ",
+                     module_name.substr(last_dot_pos + 1));
     module_name = module_name.substr(last_dot_pos + 1);
   }
-  std::string alias = "_" + module_name;
+  std::string alias = absl::StrCat("_", module_name);
   // Generate a unique alias by adding _1 suffixes until we get an unused alias.
   while (seen_aliases->find(alias) != seen_aliases->end()) {
     alias = alias + "_1";
@@ -177,7 +182,7 @@ void PyiGenerator::PrintImportForDescriptor(
 
 void PyiGenerator::PrintImports() const {
   // Prints imported dependent _pb2 files.
-  std::set<std::string> seen_aliases;
+  absl::flat_hash_set<std::string> seen_aliases;
   for (int i = 0; i < file_->dependency_count(); ++i) {
     const FileDescriptor* dep = file_->dependency(i);
     PrintImportForDescriptor(*dep, &seen_aliases);
@@ -301,17 +306,26 @@ void PyiGenerator::PrintEnum(const EnumDescriptor& enum_descriptor) const {
       "    __slots__ = []\n",
       "enum_name", enum_name);
   Annotate("enum_name", &enum_descriptor);
+  printer_->Indent();
+  PrintEnumValues(enum_descriptor, /* is_classvar = */ true);
+  printer_->Outdent();
 }
 
-void PyiGenerator::PrintEnumValues(
-    const EnumDescriptor& enum_descriptor) const {
+void PyiGenerator::PrintEnumValues(const EnumDescriptor& enum_descriptor,
+                                   bool is_classvar) const {
   // enum values
   std::string module_enum_name = ModuleLevelName(enum_descriptor);
   for (int j = 0; j < enum_descriptor.value_count(); ++j) {
     const EnumValueDescriptor* value_descriptor = enum_descriptor.value(j);
-    printer_->Print("$name$: $module_enum_name$\n",
-                    "name", value_descriptor->name(),
-                    "module_enum_name", module_enum_name);
+    if (is_classvar) {
+      printer_->Print("$name$: _ClassVar[$module_enum_name$]\n", "name",
+                      value_descriptor->name(), "module_enum_name",
+                      module_enum_name);
+    } else {
+      printer_->Print("$name$: $module_enum_name$\n", "name",
+                      value_descriptor->name(), "module_enum_name",
+                      module_enum_name);
+    }
     Annotate("name", value_descriptor);
   }
 }
@@ -372,7 +386,7 @@ std::string PyiGenerator::GetFieldType(
       return name;
     }
     default:
-      GOOGLE_LOG(FATAL) << "Unsupported field type.";
+      GOOGLE_ABSL_LOG(FATAL) << "Unsupported field type.";
   }
   return "";
 }
@@ -394,7 +408,6 @@ void PyiGenerator::PrintMessage(
   printer_->Print("class $class_name$(_message.Message$extra_base$):\n",
                   "class_name", class_name, "extra_base", extra_base);
   Annotate("class_name", &message_descriptor);
-  printer_->Indent();
   printer_->Indent();
 
   // Prints slots
@@ -491,6 +504,7 @@ void PyiGenerator::PrintMessage(
     }
     is_first = false;
     printer_->Print(", $field_name$: ", "field_name", field_name);
+    Annotate("field_name", field_des);
     if (field_des->is_repeated() ||
         field_des->cpp_type() != FieldDescriptor::CPPTYPE_BOOL) {
       printer_->Print("_Optional[");
@@ -534,8 +548,6 @@ void PyiGenerator::PrintMessage(
     printer_->Print(", **kwargs");
   }
   printer_->Print(") -> None: ...\n");
-
-  printer_->Outdent();
   printer_->Outdent();
 }
 
@@ -576,7 +588,7 @@ bool PyiGenerator::Generate(const FileDescriptor* file,
   for (const std::pair<std::string, std::string>& option : options) {
     if (option.first == "annotate_code") {
       annotate_code = true;
-    } else if (HasSuffixString(option.first, ".pyi")) {
+    } else if (absl::EndsWith(option.first, ".pyi")) {
       filename = option.first;
     } else {
       *error = "Unknown generator option: " + option.first;
@@ -589,12 +601,14 @@ bool PyiGenerator::Generate(const FileDescriptor* file,
   }
 
   std::unique_ptr<io::ZeroCopyOutputStream> output(context->Open(filename));
-  GOOGLE_CHECK(output.get());
+  GOOGLE_ABSL_CHECK(output.get());
   GeneratedCodeInfo annotations;
   io::AnnotationProtoCollector<GeneratedCodeInfo> annotation_collector(
       &annotations);
-  io::Printer printer(output.get(), '$',
-                      annotate_code ? &annotation_collector : nullptr);
+  io::Printer::Options printer_opt(
+      '$', annotate_code ? &annotation_collector : nullptr);
+  printer_opt.spaces_per_indent = 4;
+  io::Printer printer(output.get(), printer_opt);
   printer_ = &printer;
 
   PrintImports();

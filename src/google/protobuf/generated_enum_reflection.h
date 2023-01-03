@@ -39,19 +39,18 @@
 #ifndef GOOGLE_PROTOBUF_GENERATED_ENUM_REFLECTION_H__
 #define GOOGLE_PROTOBUF_GENERATED_ENUM_REFLECTION_H__
 
-
 #include <string>
 
-#include <google/protobuf/port.h>
+#include "google/protobuf/port.h"
 #include "absl/strings/string_view.h"
-#include <google/protobuf/generated_enum_util.h>
+#include "google/protobuf/generated_enum_util.h"
 
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
 #endif
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -95,6 +94,6 @@ PROTOBUF_EXPORT const std::string& NameOfEnum(const EnumDescriptor* descriptor,
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_GENERATED_ENUM_REFLECTION_H__

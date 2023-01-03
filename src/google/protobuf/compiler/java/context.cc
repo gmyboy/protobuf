@@ -28,14 +28,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/compiler/java/context.h>
+#include "google/protobuf/compiler/java/context.h"
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/stubs/strutil.h>
+#include "google/protobuf/stubs/logging.h"
 #include "absl/strings/str_cat.h"
-#include <google/protobuf/compiler/java/field.h>
-#include <google/protobuf/compiler/java/helpers.h>
-#include <google/protobuf/compiler/java/name_resolver.h>
+#include "google/protobuf/compiler/java/field.h"
+#include "google/protobuf/compiler/java/helpers.h"
+#include "google/protobuf/compiler/java/name_resolver.h"
+#include "google/protobuf/descriptor.h"
 
 namespace google {
 namespace protobuf {
@@ -131,10 +131,10 @@ void Context::InitializeFieldGeneratorInfoForFields(
   std::vector<std::string> conflict_reason(fields.size());
   for (int i = 0; i < fields.size(); ++i) {
     const FieldDescriptor* field = fields[i];
-    const std::string& name = UnderscoresToCapitalizedCamelCase(field);
+    const std::string& name = CapitalizedFieldName(field);
     for (int j = i + 1; j < fields.size(); ++j) {
       const FieldDescriptor* other = fields[j];
-      const std::string& other_name = UnderscoresToCapitalizedCamelCase(other);
+      const std::string& other_name = CapitalizedFieldName(other);
       if (name == other_name) {
         is_conflict[i] = is_conflict[j] = true;
         conflict_reason[i] = conflict_reason[j] =
@@ -147,15 +147,16 @@ void Context::InitializeFieldGeneratorInfoForFields(
       }
     }
     if (is_conflict[i]) {
-      GOOGLE_LOG(WARNING) << "field \"" << field->full_name() << "\" is conflicting "
-                   << "with another field: " << conflict_reason[i];
+      GOOGLE_ABSL_LOG(WARNING) << "field \"" << field->full_name()
+                        << "\" is conflicting "
+                        << "with another field: " << conflict_reason[i];
     }
   }
   for (int i = 0; i < fields.size(); ++i) {
     const FieldDescriptor* field = fields[i];
     FieldGeneratorInfo info;
     info.name = CamelCaseFieldName(field);
-    info.capitalized_name = UnderscoresToCapitalizedCamelCase(field);
+    info.capitalized_name = CapitalizedFieldName(field);
     // For fields conflicting with some other fields, we append the field
     // number to their field names in generated code to avoid conflicts.
     if (is_conflict[i]) {
@@ -171,8 +172,8 @@ const FieldGeneratorInfo* Context::GetFieldGeneratorInfo(
     const FieldDescriptor* field) const {
   auto it = field_generator_info_map_.find(field);
   if (it == field_generator_info_map_.end()) {
-    GOOGLE_LOG(FATAL) << "Can not find FieldGeneratorInfo for field: "
-               << field->full_name();
+    GOOGLE_ABSL_LOG(FATAL) << "Can not find FieldGeneratorInfo for field: "
+                    << field->full_name();
   }
   return &it->second;
 }
@@ -181,8 +182,8 @@ const OneofGeneratorInfo* Context::GetOneofGeneratorInfo(
     const OneofDescriptor* oneof) const {
   auto it = oneof_generator_info_map_.find(oneof);
   if (it == oneof_generator_info_map_.end()) {
-    GOOGLE_LOG(FATAL) << "Can not find OneofGeneratorInfo for oneof: "
-               << oneof->name();
+    GOOGLE_ABSL_LOG(FATAL) << "Can not find OneofGeneratorInfo for oneof: "
+                    << oneof->name();
   }
   return &it->second;
 }

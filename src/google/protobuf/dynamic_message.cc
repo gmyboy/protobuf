@@ -62,31 +62,30 @@
 // Item 8 of "More Effective C++" discusses this in more detail, though
 // I don't have the book on me right now so I'm not sure.
 
-#include <google/protobuf/dynamic_message.h>
+#include "google/protobuf/dynamic_message.h"
 
 #include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <new>
-#include <unordered_map>
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/generated_message_reflection.h>
-#include <google/protobuf/generated_message_util.h>
-#include <google/protobuf/unknown_field_set.h>
-#include <google/protobuf/arenastring.h>
-#include <google/protobuf/extension_set.h>
-#include <google/protobuf/map_field.h>
-#include <google/protobuf/map_field_inl.h>
-#include <google/protobuf/map_type_handler.h>
-#include <google/protobuf/reflection_ops.h>
-#include <google/protobuf/repeated_field.h>
-#include <google/protobuf/wire_format.h>
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/generated_message_reflection.h"
+#include "google/protobuf/generated_message_util.h"
+#include "google/protobuf/unknown_field_set.h"
+#include "google/protobuf/arenastring.h"
+#include "google/protobuf/extension_set.h"
+#include "google/protobuf/map_field.h"
+#include "google/protobuf/map_field_inl.h"
+#include "google/protobuf/map_type_handler.h"
+#include "google/protobuf/reflection_ops.h"
+#include "google/protobuf/repeated_field.h"
+#include "google/protobuf/wire_format.h"
 
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -179,7 +178,7 @@ int FieldSpaceUsed(const FieldDescriptor* field) {
     }
   }
 
-  GOOGLE_LOG(DFATAL) << "Can't get here.";
+  GOOGLE_ABSL_LOG(DFATAL) << "Can't get here.";
   return 0;
 }
 
@@ -588,7 +587,7 @@ DynamicMessage::~DynamicMessage() {
 
 void DynamicMessage::CrossLinkPrototypes() {
   // This should only be called on the prototype message.
-  GOOGLE_CHECK(is_prototype());
+  GOOGLE_ABSL_CHECK(is_prototype());
 
   DynamicMessageFactory* factory = type_info_->factory;
   const Descriptor* descriptor = type_info_->type;
@@ -825,4 +824,4 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>  // NOLINT
+#include "google/protobuf/port_undef.inc"  // NOLINT

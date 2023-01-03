@@ -33,13 +33,14 @@
 // Test reflection methods for aggregate access to Repeated[Ptr]Fields.
 // This test proto2 methods on a proto2 layout.
 
-#include <google/protobuf/unittest.pb.h>
-#include <google/protobuf/dynamic_message.h>
-#include <google/protobuf/reflection.h>
+#include "google/protobuf/dynamic_message.h"
+#include "google/protobuf/reflection.h"
 #include <gtest/gtest.h>
 #include "absl/base/casts.h"
-#include <google/protobuf/port.h>
-#include <google/protobuf/test_util.h>
+#include "absl/strings/cord.h"
+#include "google/protobuf/port.h"
+#include "google/protobuf/test_util.h"
+#include "google/protobuf/unittest.pb.h"
 
 namespace google {
 namespace protobuf {
@@ -165,7 +166,7 @@ TEST(RepeatedFieldReflectionTest, ExtensionFields) {
 
   const FieldDescriptor* fd_repeated_int64_extension =
       desc->file()->FindExtensionByName("repeated_int64_extension");
-  GOOGLE_CHECK(fd_repeated_int64_extension != nullptr);
+  GOOGLE_ABSL_CHECK(fd_repeated_int64_extension != nullptr);
 
   const RepeatedField<int64_t>& rf_int64_extension =
       refl->GetRepeatedField<int64_t>(extended_message,
@@ -538,7 +539,7 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForExtensionFields) {
 
   const FieldDescriptor* fd_repeated_int64_extension =
       desc->file()->FindExtensionByName("repeated_int64_extension");
-  GOOGLE_CHECK(fd_repeated_int64_extension != nullptr);
+  GOOGLE_ABSL_CHECK(fd_repeated_int64_extension != nullptr);
 
   const RepeatedFieldRef<int64_t> rf_int64_extension =
       refl->GetRepeatedFieldRef<int64_t>(extended_message,

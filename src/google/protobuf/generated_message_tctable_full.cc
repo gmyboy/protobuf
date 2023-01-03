@@ -30,16 +30,16 @@
 
 #include <cstdint>
 
-#include <google/protobuf/extension_set.h>
-#include <google/protobuf/generated_message_tctable_impl.h>
-#include <google/protobuf/message.h>
-#include <google/protobuf/parse_context.h>
-#include <google/protobuf/port.h>
-#include <google/protobuf/unknown_field_set.h>
-#include <google/protobuf/wire_format.h>
+#include "google/protobuf/extension_set.h"
+#include "google/protobuf/generated_message_tctable_impl.h"
+#include "google/protobuf/message.h"
+#include "google/protobuf/parse_context.h"
+#include "google/protobuf/port.h"
+#include "google/protobuf/unknown_field_set.h"
+#include "google/protobuf/wire_format.h"
 
 // must be last
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -51,6 +51,10 @@ const char* TcParser::GenericFallback(PROTOBUF_TC_PARAM_DECL) {
 }
 
 const char* TcParser::ReflectionFallback(PROTOBUF_TC_PARAM_DECL) {
+  if (PROTOBUF_PREDICT_FALSE(MustFallbackToGeneric(PROTOBUF_TC_PARAM_PASS))) {
+    PROTOBUF_MUSTTAIL return GenericFallback(PROTOBUF_TC_PARAM_PASS);
+  }
+
   SyncHasbits(msg, hasbits, table);
   uint32_t tag = data.tag();
   if (tag == 0 || (tag & 7) == WireFormatLite::WIRETYPE_END_GROUP) {

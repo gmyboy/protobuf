@@ -40,17 +40,17 @@
 
 #include <string>
 
-#include <google/protobuf/stubs/common.h>
+#include "google/protobuf/stubs/common.h"
 #include "absl/base/call_once.h"
 #include "absl/base/casts.h"
 #include "absl/strings/string_view.h"
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/generated_enum_reflection.h>
-#include <google/protobuf/port.h>
-#include <google/protobuf/unknown_field_set.h>
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/generated_enum_reflection.h"
+#include "google/protobuf/port.h"
+#include "google/protobuf/unknown_field_set.h"
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 #ifdef SWIG
 #error "You cannot SWIG proto headers"
@@ -140,7 +140,7 @@ struct ReflectionSchema {
   // Offset of a non-oneof field.  Getting a field offset is slightly more
   // efficient when we know statically that it is not a oneof field.
   uint32_t GetFieldOffsetNonOneof(const FieldDescriptor* field) const {
-    GOOGLE_DCHECK(!InRealOneof(field));
+    GOOGLE_ABSL_DCHECK(!InRealOneof(field));
     return OffsetValue(offsets_[field->index()], field->type());
   }
 
@@ -172,13 +172,13 @@ struct ReflectionSchema {
   // Bit index within the bit array of hasbits.  Bit order is low-to-high.
   uint32_t HasBitIndex(const FieldDescriptor* field) const {
     if (has_bits_offset_ == -1) return static_cast<uint32_t>(-1);
-    GOOGLE_DCHECK(HasHasbits());
+    GOOGLE_ABSL_DCHECK(HasHasbits());
     return has_bit_indices_[field->index()];
   }
 
   // Byte offset of the hasbits array.
   uint32_t HasBitsOffset() const {
-    GOOGLE_DCHECK(HasHasbits());
+    GOOGLE_ABSL_DCHECK(HasHasbits());
     return static_cast<uint32_t>(has_bits_offset_);
   }
 
@@ -187,13 +187,13 @@ struct ReflectionSchema {
   // Bit index within the bit array of _inlined_string_donated_.  Bit order is
   // low-to-high.
   uint32_t InlinedStringIndex(const FieldDescriptor* field) const {
-    GOOGLE_DCHECK(HasInlinedString());
+    GOOGLE_ABSL_DCHECK(HasInlinedString());
     return inlined_string_indices_[field->index()];
   }
 
   // Byte offset of the _inlined_string_donated_ array.
   uint32_t InlinedStringDonatedOffset() const {
-    GOOGLE_DCHECK(HasInlinedString());
+    GOOGLE_ABSL_DCHECK(HasInlinedString());
     return static_cast<uint32_t>(inlined_string_donated_offset_);
   }
 
@@ -210,7 +210,7 @@ struct ReflectionSchema {
 
   // The offset of the ExtensionSet in this message.
   uint32_t GetExtensionSetOffset() const {
-    GOOGLE_DCHECK(HasExtensionSet());
+    GOOGLE_ABSL_DCHECK(HasExtensionSet());
     return static_cast<uint32_t>(extensions_offset_);
   }
 
@@ -231,7 +231,7 @@ struct ReflectionSchema {
 
   // Returns true if the field is implicitly backed by LazyField.
   bool IsEagerlyVerifiedLazyField(const FieldDescriptor* field) const {
-    GOOGLE_DCHECK_EQ(field->type(), FieldDescriptor::TYPE_MESSAGE);
+    GOOGLE_ABSL_DCHECK_EQ(field->type(), FieldDescriptor::TYPE_MESSAGE);
     (void)field;
     return false;
   }
@@ -255,12 +255,12 @@ struct ReflectionSchema {
 
   // Byte offset of _split_.
   uint32_t SplitOffset() const {
-    GOOGLE_DCHECK(IsSplit());
+    GOOGLE_ABSL_DCHECK(IsSplit());
     return static_cast<uint32_t>(split_offset_);
   }
 
   uint32_t SizeofSplit() const {
-    GOOGLE_DCHECK(IsSplit());
+    GOOGLE_ABSL_DCHECK(IsSplit());
     return static_cast<uint32_t>(sizeof_split_);
   }
 
@@ -386,7 +386,7 @@ PROTOBUF_EXPORT const std::string& NameOfDenseEnumSlow(int v,
 // very fast. This assumes all the enums fall in the range [min_val .. max_val].
 template <const EnumDescriptor* (*descriptor_fn)(), int min_val, int max_val>
 const std::string& NameOfDenseEnum(int v) {
-  static_assert(max_val - min_val >= 0, "Too mamny enums between min and max.");
+  static_assert(max_val - min_val >= 0, "Too many enums between min and max.");
   static DenseEnumCacheInfo deci = {/* atomic ptr */ {}, min_val, max_val,
                                     descriptor_fn};
   const std::string** cache = deci.cache.load(std::memory_order_acquire );
@@ -402,6 +402,6 @@ const std::string& NameOfDenseEnum(int v) {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_GENERATED_MESSAGE_REFLECTION_H__

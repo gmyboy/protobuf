@@ -34,28 +34,33 @@
 //
 // Recursive descent FTW.
 
-#include <google/protobuf/compiler/parser.h>
+#include "google/protobuf/compiler/parser.h"
 
 #include <float.h>
 
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <tuple>
-#include <unordered_map>
-#include <unordered_set>
+#include <utility>
+#include <vector>
 
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/strutil.h>
 #include "absl/base/casts.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "google/protobuf/stubs/logging.h"
+#include "google/protobuf/stubs/logging.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/io/tokenizer.h>
-#include <google/protobuf/port.h>
-#include <google/protobuf/wire_format.h>
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/io/strtod.h"
+#include "google/protobuf/io/tokenizer.h"
+#include "google/protobuf/port.h"
+#include "google/protobuf/wire_format.h"
 
 namespace google {
 namespace protobuf {
@@ -64,7 +69,8 @@ namespace {
 
 using ::google::protobuf::internal::DownCast;
 
-typedef std::unordered_map<std::string, FieldDescriptorProto::Type> TypeNameMap;
+using TypeNameMap =
+    absl::flat_hash_map<absl::string_view, FieldDescriptorProto::Type>;
 
 const TypeNameMap& GetTypeNameTable() {
   static auto* table = new auto([]() {
@@ -95,7 +101,7 @@ const TypeNameMap& GetTypeNameTable() {
 
 // Camel-case the field name and append "Entry" for generated map entry name.
 // e.g. map<KeyType, ValueType> foo_map => FooMapEntry
-std::string MapEntryName(const std::string& field_name) {
+std::string MapEntryName(absl::string_view field_name) {
   std::string result;
   static const char kSuffix[] = "Entry";
   result.reserve(field_name.size() + sizeof(kSuffix));
@@ -125,7 +131,7 @@ bool IsLowercase(char c) { return c >= 'a' && c <= 'z'; }
 
 bool IsNumber(char c) { return c >= '0' && c <= '9'; }
 
-bool IsUpperCamelCase(const std::string& name) {
+bool IsUpperCamelCase(absl::string_view name) {
   if (name.empty()) {
     return true;
   }
@@ -142,7 +148,7 @@ bool IsUpperCamelCase(const std::string& name) {
   return true;
 }
 
-bool IsUpperUnderscore(const std::string& name) {
+bool IsUpperUnderscore(absl::string_view name) {
   for (const char c : name) {
     if (!IsUppercase(c) && c != '_' && !IsNumber(c)) {
       return false;
@@ -151,7 +157,7 @@ bool IsUpperUnderscore(const std::string& name) {
   return true;
 }
 
-bool IsLowerUnderscore(const std::string& name) {
+bool IsLowerUnderscore(absl::string_view name) {
   for (const char c : name) {
     if (!IsLowercase(c) && c != '_' && !IsNumber(c)) {
       return false;
@@ -160,7 +166,7 @@ bool IsLowerUnderscore(const std::string& name) {
   return true;
 }
 
-bool IsNumberFollowUnderscore(const std::string& name) {
+bool IsNumberFollowUnderscore(absl::string_view name) {
   for (int i = 1; i < name.length(); i++) {
     const char c = name[i];
     if (IsNumber(c) && name[i - 1] == '_') {
@@ -195,7 +201,7 @@ Parser::~Parser() {}
 
 // ===================================================================
 
-inline bool Parser::LookingAt(const char* text) {
+inline bool Parser::LookingAt(absl::string_view text) {
   return input_->current().text == text;
 }
 
@@ -205,7 +211,7 @@ inline bool Parser::LookingAtType(io::Tokenizer::TokenType token_type) {
 
 inline bool Parser::AtEnd() { return LookingAtType(io::Tokenizer::TYPE_END); }
 
-bool Parser::TryConsume(const char* text) {
+bool Parser::TryConsume(absl::string_view text) {
   if (LookingAt(text)) {
     input_->Next();
     return true;
@@ -214,32 +220,31 @@ bool Parser::TryConsume(const char* text) {
   }
 }
 
-bool Parser::Consume(const char* text, const char* error) {
+bool Parser::Consume(absl::string_view text, absl::string_view error) {
   if (TryConsume(text)) {
     return true;
   } else {
-    AddError(error);
+    AddError(std::string(error));
     return false;
   }
 }
 
-bool Parser::Consume(const char* text) {
-  std::string error = "Expected \"" + std::string(text) + "\".";
-  return Consume(text, error.c_str());
+bool Parser::Consume(absl::string_view text) {
+  return Consume(text, absl::StrCat("Expected \"", text, "\"."));
 }
 
-bool Parser::ConsumeIdentifier(std::string* output, const char* error) {
+bool Parser::ConsumeIdentifier(std::string* output, absl::string_view error) {
   if (LookingAtType(io::Tokenizer::TYPE_IDENTIFIER)) {
     *output = input_->current().text;
     input_->Next();
     return true;
   } else {
-    AddError(error);
+    AddError(std::string(error));
     return false;
   }
 }
 
-bool Parser::ConsumeInteger(int* output, const char* error) {
+bool Parser::ConsumeInteger(int* output, absl::string_view error) {
   if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
     uint64_t value = 0;
     if (!io::Tokenizer::ParseInteger(input_->current().text,
@@ -252,12 +257,12 @@ bool Parser::ConsumeInteger(int* output, const char* error) {
     input_->Next();
     return true;
   } else {
-    AddError(error);
+    AddError(std::string(error));
     return false;
   }
 }
 
-bool Parser::ConsumeSignedInteger(int* output, const char* error) {
+bool Parser::ConsumeSignedInteger(int* output, absl::string_view error) {
   bool is_negative = false;
   uint64_t max_value = std::numeric_limits<int32_t>::max();
   if (TryConsume("-")) {
@@ -272,7 +277,7 @@ bool Parser::ConsumeSignedInteger(int* output, const char* error) {
 }
 
 bool Parser::ConsumeInteger64(uint64_t max_value, uint64_t* output,
-                              const char* error) {
+                              absl::string_view error) {
   if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
     if (!io::Tokenizer::ParseInteger(input_->current().text, max_value,
                                      output)) {
@@ -283,12 +288,21 @@ bool Parser::ConsumeInteger64(uint64_t max_value, uint64_t* output,
     input_->Next();
     return true;
   } else {
-    AddError(error);
+    AddError(std::string(error));
     return false;
   }
 }
 
-bool Parser::ConsumeNumber(double* output, const char* error) {
+bool Parser::TryConsumeInteger64(uint64_t max_value, uint64_t* output) {
+  if (LookingAtType(io::Tokenizer::TYPE_INTEGER) &&
+      io::Tokenizer::ParseInteger(input_->current().text, max_value, output)) {
+    input_->Next();
+    return true;
+  }
+  return false;
+}
+
+bool Parser::ConsumeNumber(double* output, absl::string_view error) {
   if (LookingAtType(io::Tokenizer::TYPE_FLOAT)) {
     *output = io::Tokenizer::ParseFloat(input_->current().text);
     input_->Next();
@@ -296,13 +310,19 @@ bool Parser::ConsumeNumber(double* output, const char* error) {
   } else if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
     // Also accept integers.
     uint64_t value = 0;
-    if (!io::Tokenizer::ParseInteger(input_->current().text,
-                                     std::numeric_limits<uint64_t>::max(),
-                                     &value)) {
+    if (io::Tokenizer::ParseInteger(input_->current().text,
+                                    std::numeric_limits<uint64_t>::max(),
+                                    &value)) {
+      *output = value;
+    } else if (input_->current().text[0] == '0') {
+      // octal or hexadecimal; don't bother parsing as float
+      AddError("Integer out of range.");
+      // We still return true because we did, in fact, parse a number.
+    } else if (!io::Tokenizer::TryParseFloat(input_->current().text, output)) {
+      // out of int range, and not valid float? 🤷
       AddError("Integer out of range.");
       // We still return true because we did, in fact, parse a number.
     }
-    *output = value;
     input_->Next();
     return true;
   } else if (LookingAt("inf")) {
@@ -314,12 +334,12 @@ bool Parser::ConsumeNumber(double* output, const char* error) {
     input_->Next();
     return true;
   } else {
-    AddError(error);
+    AddError(std::string(error));
     return false;
   }
 }
 
-bool Parser::ConsumeString(std::string* output, const char* error) {
+bool Parser::ConsumeString(std::string* output, absl::string_view error) {
   if (LookingAtType(io::Tokenizer::TYPE_STRING)) {
     io::Tokenizer::ParseString(input_->current().text, output);
     input_->Next();
@@ -330,12 +350,12 @@ bool Parser::ConsumeString(std::string* output, const char* error) {
     }
     return true;
   } else {
-    AddError(error);
+    AddError(std::string(error));
     return false;
   }
 }
 
-bool Parser::TryConsumeEndOfDeclaration(const char* text,
+bool Parser::TryConsumeEndOfDeclaration(absl::string_view text,
                                         const LocationRecorder* location) {
   if (LookingAt(text)) {
     std::string leading, trailing;
@@ -349,7 +369,7 @@ bool Parser::TryConsumeEndOfDeclaration(const char* text,
     if (location != nullptr) {
       upcoming_detached_comments_.swap(detached);
       location->AttachComments(&leading, &trailing, &detached);
-    } else if (strcmp(text, "}") == 0) {
+    } else if (text == "}") {
       // If the current location is null and we are finishing the current scope,
       // drop pending upcoming detached comments.
       upcoming_detached_comments_.swap(detached);
@@ -366,12 +386,12 @@ bool Parser::TryConsumeEndOfDeclaration(const char* text,
   }
 }
 
-bool Parser::ConsumeEndOfDeclaration(const char* text,
+bool Parser::ConsumeEndOfDeclaration(absl::string_view text,
                                      const LocationRecorder* location) {
   if (TryConsumeEndOfDeclaration(text, location)) {
     return true;
   } else {
-    AddError("Expected \"" + std::string(text) + "\".");
+    AddError(absl::StrCat("Expected \"", text, "\"."));
     return false;
   }
 }
@@ -389,11 +409,14 @@ void Parser::AddError(const std::string& error) {
   AddError(input_->current().line, input_->current().column, error);
 }
 
-void Parser::AddWarning(const std::string& warning) {
+void Parser::AddWarning(int line, int column, const std::string& warning) {
   if (error_collector_ != nullptr) {
-    error_collector_->AddWarning(input_->current().line,
-                                 input_->current().column, warning);
+    error_collector_->AddWarning(line, column, warning);
   }
+}
+
+void Parser::AddWarning(const std::string& warning) {
+  AddWarning(input_->current().line, input_->current().column, warning);
 }
 
 // -------------------------------------------------------------------
@@ -493,8 +516,8 @@ int Parser::LocationRecorder::CurrentPathSize() const {
 void Parser::LocationRecorder::AttachComments(
     std::string* leading, std::string* trailing,
     std::vector<std::string>* detached_comments) const {
-  GOOGLE_CHECK(!location_->has_leading_comments());
-  GOOGLE_CHECK(!location_->has_trailing_comments());
+  GOOGLE_ABSL_CHECK(!location_->has_leading_comments());
+  GOOGLE_ABSL_CHECK(!location_->has_trailing_comments());
 
   if (!leading->empty()) {
     location_->mutable_leading_comments()->swap(*leading);
@@ -565,16 +588,16 @@ bool Parser::ValidateEnum(const EnumDescriptorProto* proto) {
   }
 
   if (has_allow_alias && !allow_alias) {
-    std::string error =
-        "\"" + proto->name() +
+    std::string error = absl::StrCat(
+        "\"", proto->name(),
         "\" declares 'option allow_alias = false;' which has no effect. "
-        "Please remove the declaration.";
+        "Please remove the declaration.");
     // This needlessly clutters declarations with nops.
     AddError(error);
     return false;
   }
 
-  std::set<int> used_values;
+  absl::flat_hash_set<int> used_values;
   bool has_duplicates = false;
   for (int i = 0; i < proto->value_size(); ++i) {
     const EnumValueDescriptorProto& enum_value = proto->value(i);
@@ -586,11 +609,11 @@ bool Parser::ValidateEnum(const EnumDescriptorProto* proto) {
     }
   }
   if (allow_alias && !has_duplicates) {
-    std::string error =
-        "\"" + proto->name() +
+    std::string error = absl::StrCat(
+        "\"", proto->name(),
         "\" declares support for enum aliases but no enum values share field "
         "numbers. Please remove the unnecessary 'option allow_alias = true;' "
-        "declaration.";
+        "declaration.");
     // Generate an error if an enum declares support for duplicate enum values
     // and does not use it protect future authors.
     AddError(error);
@@ -602,10 +625,9 @@ bool Parser::ValidateEnum(const EnumDescriptorProto* proto) {
   if (!allow_alias) {
     for (const auto& enum_value : proto->value()) {
       if (!IsUpperUnderscore(enum_value.name())) {
-        AddWarning(
-            "Enum constant should be in UPPER_CASE. Found: " +
-            enum_value.name() +
-            ". See https://developers.google.com/protocol-buffers/docs/style");
+        AddWarning(absl::StrCat(
+            "Enum constant should be in UPPER_CASE. Found: ", enum_value.name(),
+            ". See https://developers.google.com/protocol-buffers/docs/style"));
       }
     }
   }
@@ -648,10 +670,11 @@ bool Parser::Parse(io::Tokenizer* input, FileDescriptorProto* file) {
         file->set_syntax(syntax_identifier_);
       }
     } else if (!stop_after_syntax_identifier_) {
-      GOOGLE_LOG(WARNING) << "No syntax specified for the proto file: " << file->name()
-                   << ". Please use 'syntax = \"proto2\";' "
-                   << "or 'syntax = \"proto3\";' to specify a syntax "
-                   << "version. (Defaulted to proto2 syntax.)";
+      GOOGLE_ABSL_LOG(WARNING) << "No syntax specified for the proto file: "
+                        << file->name()
+                        << ". Please use 'syntax = \"proto2\";' "
+                        << "or 'syntax = \"proto3\";' to specify a syntax "
+                        << "version. (Defaulted to proto2 syntax.)";
       syntax_identifier_ = "proto2";
     }
 
@@ -697,9 +720,9 @@ bool Parser::ParseSyntaxIdentifier(const LocationRecorder& parent) {
   if (syntax != "proto2" && syntax != "proto3" &&
       !stop_after_syntax_identifier_) {
     AddError(syntax_token.line, syntax_token.column,
-             "Unrecognized syntax identifier \"" + syntax +
-                 "\".  This parser "
-                 "only recognizes \"proto2\" and \"proto3\".");
+             absl::StrCat("Unrecognized syntax identifier \"", syntax,
+                          "\".  This parser "
+                          "only recognizes \"proto2\" and \"proto3\"."));
     return false;
   }
 
@@ -763,10 +786,9 @@ bool Parser::ParseMessageDefinition(
                                   DescriptorPool::ErrorCollector::NAME);
     DO(ConsumeIdentifier(message->mutable_name(), "Expected message name."));
     if (!IsUpperCamelCase(message->name())) {
-      AddWarning(
-          "Message name should be in UpperCamelCase. Found: " +
-          message->name() +
-          ". See https://developers.google.com/protocol-buffers/docs/style");
+      AddWarning(absl::StrCat(
+          "Message name should be in UpperCamelCase. Found: ", message->name(),
+          ". See https://developers.google.com/protocol-buffers/docs/style"));
     }
   }
   DO(ParseMessageBlock(message, message_location, containing_file));
@@ -777,7 +799,7 @@ bool Parser::ParseMessageDefinition(
     //
     // We have to make sure the oneof names don't conflict with any other
     // field or oneof.
-    std::unordered_set<std::string> names;
+    absl::flat_hash_set<std::string> names;
     for (const auto& field : message->field()) {
       names.insert(field.name());
     }
@@ -802,7 +824,7 @@ bool Parser::ParseMessageDefinition(
         names.insert(oneof_name);
         field.set_oneof_index(message->oneof_decl_size());
         OneofDescriptorProto* oneof = message->add_oneof_decl();
-        oneof->set_name(oneof_name);
+        oneof->set_name(std::move(oneof_name));
       }
     }
   }
@@ -1025,15 +1047,15 @@ bool Parser::ParseMessageFieldNoLabel(
     DO(ConsumeIdentifier(field->mutable_name(), "Expected field name."));
 
     if (!IsLowerUnderscore(field->name())) {
-      AddWarning(
-          "Field name should be lowercase. Found: " + field->name() +
-          ". See: https://developers.google.com/protocol-buffers/docs/style");
+      AddWarning(absl::StrCat(
+          "Field name should be lowercase. Found: ", field->name(),
+          ". See: https://developers.google.com/protocol-buffers/docs/style"));
     }
     if (IsNumberFollowUnderscore(field->name())) {
-      AddWarning(
-          "Number should not come right after an underscore. Found: " +
-          field->name() +
-          ". See: https://developers.google.com/protocol-buffers/docs/style");
+      AddWarning(absl::StrCat(
+          "Number should not come right after an underscore. Found: ",
+          field->name(),
+          ". See: https://developers.google.com/protocol-buffers/docs/style"));
     }
   }
   DO(Consume("=", "Missing field number."));
@@ -1316,19 +1338,19 @@ bool Parser::ParseDefaultAssignment(
     }
 
     case FieldDescriptorProto::TYPE_FLOAT:
-    case FieldDescriptorProto::TYPE_DOUBLE:
+    case FieldDescriptorProto::TYPE_DOUBLE: {
       // These types can be negative.
       if (TryConsume("-")) {
         default_value->append("-");
       }
       // Parse the integer because we have to convert hex integers to decimal
       // floats.
-      double value;
+      double value = 0.0;
       DO(ConsumeNumber(&value, "Expected number."));
       // And stringify it again.
-      default_value->append(SimpleDtoa(value));
+      default_value->append(io::SimpleDtoa(value));
       break;
-
+    }
     case FieldDescriptorProto::TYPE_BOOL:
       if (TryConsume("true")) {
         default_value->assign("true");
@@ -1465,7 +1487,7 @@ bool Parser::ParseOption(Message* options,
   // Create an entry in the uninterpreted_option field.
   const FieldDescriptor* uninterpreted_option_field =
       options->GetDescriptor()->FindFieldByName("uninterpreted_option");
-  GOOGLE_CHECK(uninterpreted_option_field != nullptr)
+  GOOGLE_ABSL_CHECK(uninterpreted_option_field != nullptr)
       << "No field named \"uninterpreted_option\" in the Options proto.";
 
   const Reflection* reflection = options->GetReflection();
@@ -1518,7 +1540,8 @@ bool Parser::ParseOption(Message* options,
 
     switch (input_->current().type) {
       case io::Tokenizer::TYPE_START:
-        GOOGLE_LOG(FATAL) << "Trying to read value before any tokens have been read.";
+        GOOGLE_ABSL_LOG(FATAL)
+            << "Trying to read value before any tokens have been read.";
         return false;
 
       case io::Tokenizer::TYPE_END:
@@ -1527,9 +1550,9 @@ bool Parser::ParseOption(Message* options,
 
       case io::Tokenizer::TYPE_WHITESPACE:
       case io::Tokenizer::TYPE_NEWLINE:
-        GOOGLE_CHECK(!input_->report_whitespace() && !input_->report_newlines())
+        GOOGLE_ABSL_CHECK(!input_->report_whitespace() && !input_->report_newlines())
             << "Whitespace tokens were not requested.";
-        GOOGLE_LOG(FATAL) << "Tokenizer reported whitespace.";
+        GOOGLE_ABSL_LOG(FATAL) << "Tokenizer reported whitespace.";
         return false;
 
       case io::Tokenizer::TYPE_IDENTIFIER: {
@@ -1551,23 +1574,27 @@ bool Parser::ParseOption(Message* options,
             is_negative
                 ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1
                 : std::numeric_limits<uint64_t>::max();
-        DO(ConsumeInteger64(max_value, &value, "Expected integer."));
-        if (is_negative) {
-          value_location.AddPath(
-              UninterpretedOption::kNegativeIntValueFieldNumber);
-          uninterpreted_option->set_negative_int_value(
-              static_cast<int64_t>(0 - value));
-        } else {
-          value_location.AddPath(
-              UninterpretedOption::kPositiveIntValueFieldNumber);
-          uninterpreted_option->set_positive_int_value(value);
+        if (TryConsumeInteger64(max_value, &value)) {
+          if (is_negative) {
+            value_location.AddPath(
+                UninterpretedOption::kNegativeIntValueFieldNumber);
+            uninterpreted_option->set_negative_int_value(
+                static_cast<int64_t>(0 - value));
+          } else {
+            value_location.AddPath(
+                UninterpretedOption::kPositiveIntValueFieldNumber);
+            uninterpreted_option->set_positive_int_value(value);
+          }
+          break;
         }
-        break;
+        // value too large for an integer; fall through below to treat as
+        // floating point
+        ABSL_FALLTHROUGH_INTENDED;
       }
 
       case io::Tokenizer::TYPE_FLOAT: {
         value_location.AddPath(UninterpretedOption::kDoubleValueFieldNumber);
-        double value;
+        double value = 0.0;
         DO(ConsumeNumber(&value, "Expected number."));
         uninterpreted_option->set_double_value(is_negative ? -value : value);
         break;
@@ -1728,11 +1755,26 @@ bool Parser::ParseReserved(DescriptorProto* message,
   }
 }
 
+bool Parser::ParseReservedName(std::string* name,
+                               absl::string_view error_message) {
+  // Capture the position of the token, in case we have to report an
+  // error after it is consumed.
+  int line = input_->current().line;
+  int col = input_->current().column;
+  DO(ConsumeString(name, error_message));
+  if (!io::Tokenizer::IsIdentifier(*name)) {
+    AddWarning(line, col,
+               absl::StrFormat(
+                   "Reserved name \"%s\" is not a valid identifier.", *name));
+  }
+  return true;
+}
+
 bool Parser::ParseReservedNames(DescriptorProto* message,
                                 const LocationRecorder& parent_location) {
   do {
     LocationRecorder location(parent_location, message->reserved_name_size());
-    DO(ConsumeString(message->add_reserved_name(), "Expected field name."));
+    DO(ParseReservedName(message->add_reserved_name(), "Expected field name."));
   } while (TryConsume(","));
   DO(ConsumeEndOfDeclaration(";", &parent_location));
   return true;
@@ -1787,42 +1829,41 @@ bool Parser::ParseReservedNumbers(DescriptorProto* message,
   return true;
 }
 
-bool Parser::ParseReserved(EnumDescriptorProto* message,
-                           const LocationRecorder& message_location) {
+bool Parser::ParseReserved(EnumDescriptorProto* proto,
+                           const LocationRecorder& enum_location) {
   io::Tokenizer::Token start_token = input_->current();
   // Parse the declaration.
   DO(Consume("reserved"));
   if (LookingAtType(io::Tokenizer::TYPE_STRING)) {
-    LocationRecorder location(message_location,
+    LocationRecorder location(enum_location,
                               EnumDescriptorProto::kReservedNameFieldNumber);
     location.StartAt(start_token);
-    return ParseReservedNames(message, location);
+    return ParseReservedNames(proto, location);
   } else {
-    LocationRecorder location(message_location,
+    LocationRecorder location(enum_location,
                               EnumDescriptorProto::kReservedRangeFieldNumber);
     location.StartAt(start_token);
-    return ParseReservedNumbers(message, location);
+    return ParseReservedNumbers(proto, location);
   }
 }
 
-bool Parser::ParseReservedNames(EnumDescriptorProto* message,
+bool Parser::ParseReservedNames(EnumDescriptorProto* proto,
                                 const LocationRecorder& parent_location) {
   do {
-    LocationRecorder location(parent_location, message->reserved_name_size());
-    DO(ConsumeString(message->add_reserved_name(), "Expected enum value."));
+    LocationRecorder location(parent_location, proto->reserved_name_size());
+    DO(ParseReservedName(proto->add_reserved_name(), "Expected enum value."));
   } while (TryConsume(","));
   DO(ConsumeEndOfDeclaration(";", &parent_location));
   return true;
 }
 
-bool Parser::ParseReservedNumbers(EnumDescriptorProto* message,
+bool Parser::ParseReservedNumbers(EnumDescriptorProto* proto,
                                   const LocationRecorder& parent_location) {
   bool first = true;
   do {
-    LocationRecorder location(parent_location, message->reserved_range_size());
+    LocationRecorder location(parent_location, proto->reserved_range_size());
 
-    EnumDescriptorProto::EnumReservedRange* range =
-        message->add_reserved_range();
+    EnumDescriptorProto::EnumReservedRange* range = proto->add_reserved_range();
     int start, end;
     io::Tokenizer::Token start_token;
     {

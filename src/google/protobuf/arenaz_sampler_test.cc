@@ -28,7 +28,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/arenaz_sampler.h>
+#include "google/protobuf/arenaz_sampler.h"
 
 #include <atomic>
 #include <limits>
@@ -42,7 +42,7 @@
 
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -445,7 +445,7 @@ class ThreadSafeArenazSamplerTestThread : public Thread {
         protobuf_test_messages::proto2::TestAllTypesProto2>
         message = google::protobuf::MakeArenaSafeUnique<
             protobuf_test_messages::proto2::TestAllTypesProto2>(arena_);
-    GOOGLE_CHECK(message != nullptr);
+    GOOGLE_ABSL_CHECK(message != nullptr);
     // Signal that a message on the arena has been created.  This should create
     // a SerialArena for this thread.
     if (barrier_->Block()) {
@@ -508,7 +508,7 @@ class SampleFirstArenaThread : public Thread {
         protobuf_test_messages::proto2::TestAllTypesProto2>
         message = google::protobuf::MakeArenaSafeUnique<
             protobuf_test_messages::proto2::TestAllTypesProto2>(&arena);
-    GOOGLE_CHECK(message != nullptr);
+    GOOGLE_ABSL_CHECK(message != nullptr);
     arena_created_.Notify();
     samples_counted_.WaitForNotification();
   }

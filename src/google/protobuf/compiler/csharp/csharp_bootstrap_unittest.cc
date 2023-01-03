@@ -37,23 +37,19 @@
 // "generate_descriptor_proto.sh" and add the changed files under
 // csharp/src/ to your changelist.
 
-#include <google/protobuf/testing/googletest.h>
-
-#include <map>
-
-#include <google/protobuf/testing/file.h>
-#include <google/protobuf/compiler/importer.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/stubs/strutil.h>
+#include "google/protobuf/testing/file.h"
+#include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/substitute.h"
-#include <google/protobuf/compiler/csharp/csharp_generator.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/stubs/stl_util.h>
+#include "google/protobuf/compiler/csharp/csharp_generator.h"
+#include "google/protobuf/compiler/importer.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/io/zero_copy_stream_impl.h"
 
 namespace google {
 namespace protobuf {
@@ -87,9 +83,8 @@ class MockGeneratorContext : public GeneratorContext {
     std::string expected_contents = *it->second;
 
     std::string actual_contents;
-    GOOGLE_CHECK_OK(
-        File::GetContentsAsText(TestSourceDir() + "/" + physical_filename,
-                          &actual_contents, true))
+    GOOGLE_ABSL_CHECK_OK(File::GetContentsAsText(
+        TestSourceDir() + "/" + physical_filename, &actual_contents, true))
         << "Unable to get " << physical_filename;
     EXPECT_TRUE(actual_contents == expected_contents)
       << physical_filename << " needs to be regenerated.  Please run "
@@ -106,7 +101,7 @@ class MockGeneratorContext : public GeneratorContext {
   }
 
  private:
-  std::map<std::string, std::unique_ptr<std::string>> files_;
+  absl::flat_hash_map<std::string, std::unique_ptr<std::string>> files_;
 };
 
 class GenerateAndTest {

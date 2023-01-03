@@ -35,10 +35,9 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_FIELD_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_FIELD_H__
 
-#include <map>
 #include <string>
 
-#include <google/protobuf/compiler/java/field.h>
+#include "google/protobuf/compiler/java/field.h"
 
 namespace google {
 namespace protobuf {
@@ -70,6 +69,8 @@ class ImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
 
   // implements ImmutableFieldGenerator
   // ---------------------------------------
+  int GetMessageBitIndex() const override;
+  int GetBuilderBitIndex() const override;
   int GetNumBitsForMessage() const override;
   int GetNumBitsForBuilder() const override;
   void GenerateInterfaceMembers(io::Printer* printer) const override;
@@ -79,8 +80,7 @@ class ImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
   void GenerateBuilderClearCode(io::Printer* printer) const override;
   void GenerateMergingCode(io::Printer* printer) const override;
   void GenerateBuildingCode(io::Printer* printer) const override;
-  void GenerateParsingCode(io::Printer* printer) const override;
-  void GenerateParsingDoneCode(io::Printer* printer) const override;
+  void GenerateBuilderParsingCode(io::Printer* printer) const override;
   void GenerateSerializationCode(io::Printer* printer) const override;
   void GenerateSerializedSizeCode(io::Printer* printer) const override;
   void GenerateFieldBuilderInitializationCode(
@@ -93,18 +93,20 @@ class ImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
 
  protected:
   const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
+  int message_bit_index_;
+  int builder_bit_index_;
+  absl::flat_hash_map<absl::string_view, std::string> variables_;
   ClassNameResolver* name_resolver_;
   Context* context_;
 
-  void PrintNestedBuilderCondition(io::Printer* printer,
-                                   const char* regular_case,
-                                   const char* nested_builder_case) const;
-  void PrintNestedBuilderFunction(io::Printer* printer,
-                                  const char* method_prototype,
-                                  const char* regular_case,
-                                  const char* nested_builder_case,
-                                  const char* trailing_code) const;
+  virtual void PrintNestedBuilderCondition(
+      io::Printer* printer, const char* regular_case,
+      const char* nested_builder_case) const;
+  virtual void PrintNestedBuilderFunction(io::Printer* printer,
+                                          const char* method_prototype,
+                                          const char* regular_case,
+                                          const char* nested_builder_case,
+                                          const char* trailing_code) const;
 
  private:
   void GenerateKotlinOrNull(io::Printer* printer) const;
@@ -124,14 +126,16 @@ class ImmutableMessageOneofFieldGenerator
 
   void GenerateMembers(io::Printer* printer) const override;
   void GenerateBuilderMembers(io::Printer* printer) const override;
+  void GenerateBuilderClearCode(io::Printer* printer) const override;
   void GenerateBuildingCode(io::Printer* printer) const override;
   void GenerateMergingCode(io::Printer* printer) const override;
-  void GenerateParsingCode(io::Printer* printer) const override;
+  void GenerateBuilderParsingCode(io::Printer* printer) const override;
   void GenerateSerializationCode(io::Printer* printer) const override;
   void GenerateSerializedSizeCode(io::Printer* printer) const override;
 };
 
-class RepeatedImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
+class RepeatedImmutableMessageFieldGenerator
+    : public ImmutableMessageFieldGenerator {
  public:
   explicit RepeatedImmutableMessageFieldGenerator(
       const FieldDescriptor* descriptor, int messageBitIndex,
@@ -152,8 +156,7 @@ class RepeatedImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
   void GenerateBuilderClearCode(io::Printer* printer) const override;
   void GenerateMergingCode(io::Printer* printer) const override;
   void GenerateBuildingCode(io::Printer* printer) const override;
-  void GenerateParsingCode(io::Printer* printer) const override;
-  void GenerateParsingDoneCode(io::Printer* printer) const override;
+  void GenerateBuilderParsingCode(io::Printer* printer) const override;
   void GenerateSerializationCode(io::Printer* printer) const override;
   void GenerateSerializedSizeCode(io::Printer* printer) const override;
   void GenerateFieldBuilderInitializationCode(
@@ -165,18 +168,14 @@ class RepeatedImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
   std::string GetBoxedType() const override;
 
  protected:
-  const FieldDescriptor* descriptor_;
-  std::map<std::string, std::string> variables_;
-  ClassNameResolver* name_resolver_;
-
-  void PrintNestedBuilderCondition(io::Printer* printer,
-                                   const char* regular_case,
-                                   const char* nested_builder_case) const;
+  void PrintNestedBuilderCondition(
+      io::Printer* printer, const char* regular_case,
+      const char* nested_builder_case) const override;
   void PrintNestedBuilderFunction(io::Printer* printer,
                                   const char* method_prototype,
                                   const char* regular_case,
                                   const char* nested_builder_case,
-                                  const char* trailing_code) const;
+                                  const char* trailing_code) const override;
 };
 
 }  // namespace java

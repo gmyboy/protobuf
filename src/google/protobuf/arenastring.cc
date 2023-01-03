@@ -28,21 +28,19 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/arenastring.h>
+#include "google/protobuf/arenastring.h"
 
 #include <cstddef>
 
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/io/coded_stream.h>
+#include "google/protobuf/stubs/logging.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
-#include <google/protobuf/message_lite.h>
-#include <google/protobuf/parse_context.h>
-#include <google/protobuf/stubs/stl_util.h>
+#include "google/protobuf/io/coded_stream.h"
+#include "google/protobuf/message_lite.h"
+#include "google/protobuf/parse_context.h"
 
 // clang-format off
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 // clang-format on
 
 namespace google {
@@ -141,6 +139,31 @@ void ArenaStringPtr::Set(absl::string_view value, Arena* arena) {
   }
 }
 
+template <>
+void ArenaStringPtr::Set(const std::string& value, Arena* arena) {
+  ScopedCheckPtrInvariants check(&tagged_ptr_);
+  if (IsDefault()) {
+    // If we're not on an arena, skip straight to a true string to avoid
+    // possible copy cost later.
+    tagged_ptr_ = arena != nullptr ? CreateArenaString(*arena, value)
+                                   : CreateString(value);
+  } else {
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    if (arena == nullptr) {
+      auto* old = tagged_ptr_.GetIfAllocated();
+      tagged_ptr_ = CreateString(value);
+      delete old;
+    } else {
+      auto* old = UnsafeMutablePointer();
+      tagged_ptr_ = CreateArenaString(*arena, value);
+      old->assign("garbagedata");
+    }
+#else   // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    UnsafeMutablePointer()->assign(value);
+#endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  }
+}
+
 void ArenaStringPtr::Set(std::string&& value, Arena* arena) {
   ScopedCheckPtrInvariants check(&tagged_ptr_);
   if (IsDefault()) {
@@ -179,7 +202,7 @@ std::string* ArenaStringPtr::MutableNoCopy(Arena* arena) {
   if (tagged_ptr_.IsMutable()) {
     return tagged_ptr_.Get();
   } else {
-    GOOGLE_DCHECK(IsDefault());
+    GOOGLE_ABSL_DCHECK(IsDefault());
     // Allocate empty. The contents are not relevant.
     return NewString(arena);
   }
@@ -188,7 +211,7 @@ std::string* ArenaStringPtr::MutableNoCopy(Arena* arena) {
 template <typename... Lazy>
 std::string* ArenaStringPtr::MutableSlow(::google::protobuf::Arena* arena,
                                          const Lazy&... lazy_default) {
-  GOOGLE_DCHECK(IsDefault());
+  GOOGLE_ABSL_DCHECK(IsDefault());
 
   // For empty defaults, this ends up calling the default constructor which is
   // more efficient than a copy construction from
@@ -262,7 +285,7 @@ const char* EpsCopyInputStream::ReadArenaString(const char* ptr,
                                                 ArenaStringPtr* s,
                                                 Arena* arena) {
   ScopedCheckPtrInvariants check(&s->tagged_ptr_);
-  GOOGLE_DCHECK(arena != nullptr);
+  GOOGLE_ABSL_DCHECK(arena != nullptr);
 
   int size = ReadSize(&ptr);
   if (!ptr) return nullptr;
@@ -277,4 +300,4 @@ const char* EpsCopyInputStream::ReadArenaString(const char* ptr,
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

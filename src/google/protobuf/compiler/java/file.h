@@ -39,8 +39,8 @@
 #include <string>
 #include <vector>
 
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/compiler/java/options.h>
+#include "google/protobuf/compiler/java/options.h"
+#include "google/protobuf/port.h"
 
 namespace google {
 namespace protobuf {
@@ -82,6 +82,7 @@ class FileGenerator {
   void Generate(io::Printer* printer);
 
   std::string GetKotlinClassname();
+  void GenerateKotlin(io::Printer* printer);
   void GenerateKotlinSiblings(const std::string& package_dir,
                               GeneratorContext* generator_context,
                               std::vector<std::string>* file_list,

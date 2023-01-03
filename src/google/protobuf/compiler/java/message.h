@@ -35,10 +35,10 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_H__
 
-#include <map>
 #include <string>
 
-#include <google/protobuf/compiler/java/field.h>
+#include "absl/container/btree_map.h"
+#include "google/protobuf/compiler/java/field.h"
 
 namespace google {
 namespace protobuf {
@@ -94,7 +94,7 @@ class MessageGenerator {
 
  protected:
   const Descriptor* descriptor_;
-  std::set<const OneofDescriptor*> oneofs_;
+  absl::btree_map<int, const OneofDescriptor*> oneofs_;
 };
 
 class ImmutableMessageGenerator : public MessageGenerator {

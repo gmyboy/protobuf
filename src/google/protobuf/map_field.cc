@@ -28,15 +28,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/map_field.h>
+#include "google/protobuf/map_field.h"
 
 #include <vector>
 
-#include <google/protobuf/port.h>
-#include <google/protobuf/map_field_inl.h>
+#include "google/protobuf/port.h"
+#include "google/protobuf/map_field_inl.h"
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -74,8 +74,8 @@ void MapFieldBase::SwapState(MapFieldBase* other) {
 void SwapRepeatedPtrToNull(RepeatedPtrField<Message>** from,
                            RepeatedPtrField<Message>** to, Arena* from_arena,
                            Arena* to_arena) {
-  GOOGLE_DCHECK(*from != nullptr);
-  GOOGLE_DCHECK(*to == nullptr);
+  GOOGLE_ABSL_DCHECK(*from != nullptr);
+  GOOGLE_ABSL_DCHECK(*to == nullptr);
   *to = Arena::CreateMessage<RepeatedPtrField<Message> >(to_arena);
   **to = std::move(**from);
   if (from_arena == nullptr) {
@@ -104,7 +104,7 @@ void MapFieldBase::Swap(MapFieldBase* other) {
 }
 
 void MapFieldBase::UnsafeShallowSwap(MapFieldBase* other) {
-  GOOGLE_DCHECK_EQ(arena_, other->arena_);
+  GOOGLE_ABSL_DCHECK_EQ(arena_, other->arena_);
   InternalSwap(other);
 }
 
@@ -363,7 +363,7 @@ void DynamicMapField::SetMapIteratorValue(MapIterator* map_iter) const {
 }
 
 void DynamicMapField::MergeFrom(const MapFieldBase& other) {
-  GOOGLE_DCHECK(IsMapValid() && other.IsMapValid());
+  GOOGLE_ABSL_DCHECK(IsMapValid() && other.IsMapValid());
   Map<MapKey, MapValueRef>* map = MutableMap();
   const DynamicMapField& other_field =
       reinterpret_cast<const DynamicMapField&>(other);
@@ -478,7 +478,7 @@ void DynamicMapField::SyncRepeatedFieldWithMapNoLock() const {
       case FieldDescriptor::CPPTYPE_FLOAT:
       case FieldDescriptor::CPPTYPE_ENUM:
       case FieldDescriptor::CPPTYPE_MESSAGE:
-        GOOGLE_LOG(FATAL) << "Can't get here.";
+        GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
         break;
     }
     const MapValueRef& map_val = it->second;
@@ -561,7 +561,7 @@ void DynamicMapField::SyncMapWithRepeatedFieldNoLock() const {
       case FieldDescriptor::CPPTYPE_FLOAT:
       case FieldDescriptor::CPPTYPE_ENUM:
       case FieldDescriptor::CPPTYPE_MESSAGE:
-        GOOGLE_LOG(FATAL) << "Can't get here.";
+        GOOGLE_ABSL_LOG(FATAL) << "Can't get here.";
         break;
     }
 
@@ -653,4 +653,4 @@ size_t DynamicMapField::SpaceUsedExcludingSelfNoLock() const {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

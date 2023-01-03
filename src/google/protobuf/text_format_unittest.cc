@@ -32,7 +32,7 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/text_format.h>
+#include "google/protobuf/text_format.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -40,47 +40,43 @@
 #include <atomic>
 #include <limits>
 #include <memory>
+#include <string>
 
-#include <google/protobuf/stubs/logging.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/testing/file.h>
-#include <google/protobuf/testing/file.h>
-#include <google/protobuf/any.pb.h>
-#include <google/protobuf/map_unittest.pb.h>
-#include <google/protobuf/unittest.pb.h>
-#include <google/protobuf/unittest_mset.pb.h>
-#include <google/protobuf/unittest_mset_wire_format.pb.h>
-#include <google/protobuf/unittest_proto3.pb.h>
-#include <google/protobuf/io/tokenizer.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/stubs/strutil.h>
+#include "google/protobuf/testing/file.h"
+#include "google/protobuf/testing/file.h"
+#include "google/protobuf/any.pb.h"
 #include <gmock/gmock.h>
-#include <google/protobuf/testing/googletest.h>
+#include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
-#include <google/protobuf/stubs/logging.h>
+#include "google/protobuf/stubs/logging.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/substitute.h"
-#include <google/protobuf/test_util.h>
-#include <google/protobuf/test_util2.h>
+#include "google/protobuf/io/tokenizer.h"
+#include "google/protobuf/io/zero_copy_stream_impl.h"
+#include "google/protobuf/map_unittest.pb.h"
+#include "google/protobuf/test_util.h"
+#include "google/protobuf/test_util2.h"
+#include "google/protobuf/unittest.pb.h"
+#include "google/protobuf/unittest_mset.pb.h"
+#include "google/protobuf/unittest_mset_wire_format.pb.h"
+#include "google/protobuf/unittest_proto3.pb.h"
 
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
-
-namespace internal {
-// Controls insertion of DEBUG_STRING_SILENT_MARKER.
-extern PROTOBUF_EXPORT std::atomic<bool> enable_debug_text_format_marker;
-}  // namespace internal
 
 // Can't use an anonymous namespace here due to brokenness of Tru64 compiler.
 namespace text_format_unittest {
 
 using ::google::protobuf::internal::kDebugStringSilentMarker;
+using ::testing::AllOf;
+using ::testing::HasSubstr;
 
 // A basic string with different escapable characters for testing.
 const std::string kEscapeTestString =
@@ -95,7 +91,7 @@ const std::string kEscapeTestStringEscaped =
 class TextFormatTest : public testing::Test {
  public:
   static void SetUpTestSuite() {
-    GOOGLE_CHECK_OK(File::GetContents(
+    GOOGLE_ABSL_CHECK_OK(File::GetContents(
         TestUtil::GetTestDataPath(
             "third_party/protobuf/"
             "testdata/text_format_unittest_data_oneof_implemented.txt"),
@@ -117,7 +113,7 @@ std::string TextFormatTest::static_proto_text_format_;
 class TextFormatExtensionsTest : public testing::Test {
  public:
   static void SetUpTestSuite() {
-    GOOGLE_CHECK_OK(File::GetContents(
+    GOOGLE_ABSL_CHECK_OK(File::GetContents(
         TestUtil::GetTestDataPath("third_party/protobuf/testdata/"
                                   "text_format_unittest_extensions_data.txt"),
         &static_proto_text_format_, true));
@@ -162,6 +158,7 @@ TEST_F(TextFormatTest, ShortDebugString) {
                          "optional_nested_message { bb: 2 } "
                          "optional_foreign_message { }"));
 }
+
 
 TEST_F(TextFormatTest, ShortPrimitiveRepeateds) {
   proto_.set_optional_int32(123);
@@ -781,15 +778,24 @@ class CustomNestedMessagePrinter : public TextFormat::MessagePrinter {
   ~CustomNestedMessagePrinter() override {}
   void Print(const Message& message, bool single_line_mode,
              TextFormat::BaseTextGenerator* generator) const override {
-    generator->PrintLiteral("custom");
+    generator->PrintLiteral("// custom\n");
+    if (printer_ != nullptr) {
+      printer_->PrintMessage(message, generator);
+    }
   }
+
+  void SetPrinter(TextFormat::Printer* printer) { printer_ = printer; }
+
+ private:
+  TextFormat::Printer* printer_ = nullptr;
 };
 
 TEST_F(TextFormatTest, CustomMessagePrinter) {
   TextFormat::Printer printer;
+  auto* custom_printer = new CustomNestedMessagePrinter;
   printer.RegisterMessagePrinter(
       unittest::TestAllTypes::NestedMessage::default_instance().descriptor(),
-      new CustomNestedMessagePrinter);
+      custom_printer);
 
   unittest::TestAllTypes message;
   std::string text;
@@ -798,7 +804,11 @@ TEST_F(TextFormatTest, CustomMessagePrinter) {
 
   message.mutable_optional_nested_message()->set_bb(1);
   EXPECT_TRUE(printer.PrintToString(message, &text));
-  EXPECT_EQ("optional_nested_message {\n  custom}\n", text);
+  EXPECT_EQ("optional_nested_message {\n  // custom\n}\n", text);
+
+  custom_printer->SetPrinter(&printer);
+  EXPECT_TRUE(printer.PrintToString(message, &text));
+  EXPECT_EQ("optional_nested_message {\n  // custom\n  bb: 1\n}\n", text);
 }
 
 TEST_F(TextFormatTest, ParseBasic) {
@@ -1083,10 +1093,8 @@ TEST_F(TextFormatTest, OptionalColon) {
 
 // Some platforms (e.g. Windows) insist on padding the exponent to three
 // digits when one or two would be just fine.
-static std::string RemoveRedundantZeros(std::string text) {
-  text = StringReplace(text, "e+0", "e+", true);
-  text = StringReplace(text, "e-0", "e-", true);
-  return text;
+static std::string RemoveRedundantZeros(absl::string_view text) {
+  return absl::StrReplaceAll(text, {{"e+0", "e+"}, {"e-0", "e-"}});
 }
 
 TEST_F(TextFormatTest, PrintExotic) {
@@ -1912,7 +1920,11 @@ TEST_F(TextFormatParserTest, ParseDeprecatedField) {
   ExpectMessage("deprecated_int32: 42",
                 "WARNING:text format contains deprecated field "
                 "\"deprecated_int32\"",
-                1, 21, &message, true);
+                1, 17, &message, true);
+  ExpectMessage("deprecated_message {\n#blah\n#blah\n#blah\n}\n",
+                "WARNING:text format contains deprecated field "
+                "\"deprecated_message\"",
+                1, 20, &message, true);
 }
 
 TEST_F(TextFormatParserTest, SetRecursionLimit) {
@@ -2269,6 +2281,59 @@ TEST(TextFormatUnknownFieldTest, TestUnknownExtension) {
   EXPECT_FALSE(parser.ParseFromString("unknown_field: 1", &proto));
 }
 
+template <bool silent, bool redact, bool randomize>
+class TextFormatBaseMarkerTest : public testing::Test {
+ public:
+  void SetUp() override {
+    saved_enable_debug_text_format_marker_ =
+        internal::enable_debug_text_format_marker;
+    saved_enable_debug_text_redaction_marker_ =
+        internal::enable_debug_text_redaction_marker;
+    saved_enable_debug_text_random_marker_ =
+        internal::enable_debug_text_random_marker;
+
+    internal::enable_debug_text_format_marker = silent;
+    internal::enable_debug_text_redaction_marker = redact;
+    internal::enable_debug_text_random_marker = randomize;
+  }
+
+  void TearDown() override {
+    internal::enable_debug_text_format_marker =
+        saved_enable_debug_text_format_marker_;
+    internal::enable_debug_text_redaction_marker =
+        saved_enable_debug_text_redaction_marker_;
+    internal::enable_debug_text_random_marker =
+        saved_enable_debug_text_random_marker_;
+  }
+
+ private:
+  bool saved_enable_debug_text_format_marker_;
+  bool saved_enable_debug_text_redaction_marker_;
+  bool saved_enable_debug_text_random_marker_;
+};
+
+using TextFormatRedactionTest = TextFormatBaseMarkerTest<false, true, false>;
+
+TEST_F(TextFormatRedactionTest, TestRedactedField) {
+  unittest::RedactedFields proto;
+  proto.set_optional_redacted_string("foo");
+  EXPECT_THAT(
+      proto.DebugString(),
+      testing::MatchesRegex("optional_redacted_string: \\[REDACTED\\]\n"));
+  EXPECT_THAT(
+      proto.ShortDebugString(),
+      testing::MatchesRegex("optional_redacted_string: \\[REDACTED\\]"));
+}
+
+TEST_F(TextFormatRedactionTest, TestTextFormatIsNotRedacted) {
+  unittest::RedactedFields proto;
+  proto.set_optional_redacted_string("foo");
+
+  std::string text;
+  ASSERT_TRUE(TextFormat::PrintToString(proto, &text));
+  EXPECT_EQ("optional_redacted_string: \"foo\"\n", text);
+}
+
 TEST(TextFormatFloatingPointTest, PreservesNegative0) {
   proto3_unittest::TestAllTypes in_message;
   in_message.set_optional_float(-0.0f);
@@ -2291,4 +2356,4 @@ TEST(TextFormatFloatingPointTest, PreservesNegative0) {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

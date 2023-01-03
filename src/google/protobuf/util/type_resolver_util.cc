@@ -28,21 +28,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/type_resolver_util.h>
+#include "google/protobuf/util/type_resolver_util.h"
 
-#include <google/protobuf/type.pb.h>
-#include <google/protobuf/wrappers.pb.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/stubs/strutil.h>
+#include "google/protobuf/type.pb.h"
+#include "google/protobuf/wrappers.pb.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/stubs/logging.h"
 #include "absl/status/status.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
-#include <google/protobuf/util/internal/utility.h>
-#include <google/protobuf/util/type_resolver.h>
+#include "google/protobuf/io/strtod.h"
+#include "google/protobuf/util/type_resolver.h"
 
 // clang-format off
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 // clang-format on
 
 namespace google {
@@ -330,10 +330,10 @@ class DescriptorPoolTypeResolver : public TypeResolver {
         return absl::StrCat(descriptor->default_value_uint64());
         break;
       case FieldDescriptor::CPPTYPE_FLOAT:
-        return SimpleFtoa(descriptor->default_value_float());
+        return io::SimpleFtoa(descriptor->default_value_float());
         break;
       case FieldDescriptor::CPPTYPE_DOUBLE:
-        return SimpleDtoa(descriptor->default_value_double());
+        return io::SimpleDtoa(descriptor->default_value_double());
         break;
       case FieldDescriptor::CPPTYPE_BOOL:
         return descriptor->default_value_bool() ? "true" : "false";
@@ -349,7 +349,7 @@ class DescriptorPoolTypeResolver : public TypeResolver {
         return descriptor->default_value_enum()->name();
         break;
       case FieldDescriptor::CPPTYPE_MESSAGE:
-        GOOGLE_LOG(DFATAL) << "Messages can't have default values!";
+        GOOGLE_ABSL_LOG(DFATAL) << "Messages can't have default values!";
         break;
     }
     return "";

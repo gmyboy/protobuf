@@ -28,21 +28,22 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/time_util.h>
+#include "google/protobuf/util/time_util.h"
 
 #include <cstdint>
+#include <cstdlib>
 
-#include <google/protobuf/stubs/strutil.h>
-#include <google/protobuf/duration.pb.h>
-#include <google/protobuf/timestamp.pb.h>
-#include <google/protobuf/stubs/int128.h>
+#include "google/protobuf/duration.pb.h"
+#include "google/protobuf/timestamp.pb.h"
+#include "google/protobuf/stubs/logging.h"
+#include "absl/numeric/int128.h"
 #include "absl/strings/str_cat.h"
-#include <google/protobuf/stubs/stringprintf.h>
+#include "absl/strings/str_format.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 
 // Must go after other includes.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -66,8 +67,8 @@ T CreateNormalized(int64_t seconds, int32_t nanos);
 
 template <>
 Timestamp CreateNormalized(int64_t seconds, int32_t nanos) {
-  GOOGLE_DCHECK(seconds >= TimeUtil::kTimestampMinSeconds &&
-         seconds <= TimeUtil::kTimestampMaxSeconds)
+  GOOGLE_ABSL_DCHECK(seconds >= TimeUtil::kTimestampMinSeconds &&
+              seconds <= TimeUtil::kTimestampMaxSeconds)
       << "Timestamp seconds are outside of the valid range";
 
   // Make sure nanos is in the range.
@@ -81,10 +82,10 @@ Timestamp CreateNormalized(int64_t seconds, int32_t nanos) {
     nanos += kNanosPerSecond;
   }
 
-  GOOGLE_DCHECK(seconds >= TimeUtil::kTimestampMinSeconds &&
-         seconds <= TimeUtil::kTimestampMaxSeconds &&
-         nanos >= TimeUtil::kTimestampMinNanoseconds &&
-         nanos <= TimeUtil::kTimestampMaxNanoseconds)
+  GOOGLE_ABSL_DCHECK(seconds >= TimeUtil::kTimestampMinSeconds &&
+              seconds <= TimeUtil::kTimestampMaxSeconds &&
+              nanos >= TimeUtil::kTimestampMinNanoseconds &&
+              nanos <= TimeUtil::kTimestampMaxNanoseconds)
       << "Timestamp is outside of the valid range";
   Timestamp result;
   result.set_seconds(seconds);
@@ -94,8 +95,8 @@ Timestamp CreateNormalized(int64_t seconds, int32_t nanos) {
 
 template <>
 Duration CreateNormalized(int64_t seconds, int32_t nanos) {
-  GOOGLE_DCHECK(seconds >= TimeUtil::kDurationMinSeconds &&
-         seconds <= TimeUtil::kDurationMaxSeconds)
+  GOOGLE_ABSL_DCHECK(seconds >= TimeUtil::kDurationMinSeconds &&
+              seconds <= TimeUtil::kDurationMaxSeconds)
       << "Duration seconds are outside of the valid range";
 
   // Make sure nanos is in the range.
@@ -112,10 +113,10 @@ Duration CreateNormalized(int64_t seconds, int32_t nanos) {
     nanos += kNanosPerSecond;
   }
 
-  GOOGLE_DCHECK(seconds >= TimeUtil::kDurationMinSeconds &&
-         seconds <= TimeUtil::kDurationMaxSeconds &&
-         nanos >= TimeUtil::kDurationMinNanoseconds &&
-         nanos <= TimeUtil::kDurationMaxNanoseconds)
+  GOOGLE_ABSL_DCHECK(seconds >= TimeUtil::kDurationMinSeconds &&
+              seconds <= TimeUtil::kDurationMaxSeconds &&
+              nanos >= TimeUtil::kDurationMinNanoseconds &&
+              nanos <= TimeUtil::kDurationMaxNanoseconds)
       << "Duration is outside of the valid range";
   Duration result;
   result.set_seconds(seconds);
@@ -127,11 +128,11 @@ Duration CreateNormalized(int64_t seconds, int32_t nanos) {
 // precision to represent the exact value.
 std::string FormatNanos(int32_t nanos) {
   if (nanos % kNanosPerMillisecond == 0) {
-    return StringPrintf("%03d", nanos / kNanosPerMillisecond);
+    return absl::StrFormat("%03d", nanos / kNanosPerMillisecond);
   } else if (nanos % kNanosPerMicrosecond == 0) {
-    return StringPrintf("%06d", nanos / kNanosPerMicrosecond);
+    return absl::StrFormat("%06d", nanos / kNanosPerMicrosecond);
   } else {
-    return StringPrintf("%09d", nanos);
+    return absl::StrFormat("%09d", nanos);
   }
 }
 
@@ -268,11 +269,13 @@ bool TimeUtil::FromString(const std::string& value, Duration* duration) {
     nanos_part = value.substr(pos + 1, value.length() - pos - 2);
   }
   char* end;
-  int64_t seconds = strto64(seconds_part.c_str(), &end, 10);
+  static_assert(sizeof(int64_t) == sizeof(long long),
+                "sizeof int64_t is not sizeof long long");
+  int64_t seconds = std::strtoll(seconds_part.c_str(), &end, 10);
   if (end != seconds_part.c_str() + seconds_part.length()) {
     return false;
   }
-  int64_t nanos = strto64(nanos_part.c_str(), &end, 10);
+  int64_t nanos = std::strtoll(nanos_part.c_str(), &end, 10);
   if (end != nanos_part.c_str() + nanos_part.length()) {
     return false;
   }
@@ -309,21 +312,22 @@ Duration TimeUtil::SecondsToDuration(int64_t seconds) {
 }
 
 Duration TimeUtil::MinutesToDuration(int64_t minutes) {
-  GOOGLE_DCHECK(minutes >= TimeUtil::kDurationMinSeconds / kSecondsPerMinute &&
-         minutes <= TimeUtil::kDurationMaxSeconds / kSecondsPerMinute)
+  GOOGLE_ABSL_DCHECK(minutes >= TimeUtil::kDurationMinSeconds / kSecondsPerMinute &&
+              minutes <= TimeUtil::kDurationMaxSeconds / kSecondsPerMinute)
       << "Duration minutes are outside of the valid range";
   return SecondsToDuration(minutes * kSecondsPerMinute);
 }
 
 Duration TimeUtil::HoursToDuration(int64_t hours) {
-  GOOGLE_DCHECK(hours >= TimeUtil::kDurationMinSeconds / kSecondsPerHour &&
-         hours <= TimeUtil::kDurationMaxSeconds / kSecondsPerHour)
+  GOOGLE_ABSL_DCHECK(hours >= TimeUtil::kDurationMinSeconds / kSecondsPerHour &&
+              hours <= TimeUtil::kDurationMaxSeconds / kSecondsPerHour)
       << "Duration hours are outside of the valid range";
   return SecondsToDuration(hours * kSecondsPerHour);
 }
 
 int64_t TimeUtil::DurationToNanoseconds(const Duration& duration) {
-  GOOGLE_DCHECK(IsDurationValid(duration)) << "Duration is outside of the valid range";
+  GOOGLE_ABSL_DCHECK(IsDurationValid(duration))
+      << "Duration is outside of the valid range";
   return duration.seconds() * kNanosPerSecond + duration.nanos();
 }
 
@@ -336,7 +340,8 @@ int64_t TimeUtil::DurationToMilliseconds(const Duration& duration) {
 }
 
 int64_t TimeUtil::DurationToSeconds(const Duration& duration) {
-  GOOGLE_DCHECK(IsDurationValid(duration)) << "Duration is outside of the valid range";
+  GOOGLE_ABSL_DCHECK(IsDurationValid(duration))
+      << "Duration is outside of the valid range";
   return duration.seconds();
 }
 
@@ -370,27 +375,27 @@ Timestamp TimeUtil::SecondsToTimestamp(int64_t seconds) {
 }
 
 int64_t TimeUtil::TimestampToNanoseconds(const Timestamp& timestamp) {
-  GOOGLE_DCHECK(IsTimestampValid(timestamp))
+  GOOGLE_ABSL_DCHECK(IsTimestampValid(timestamp))
       << "Timestamp is outside of the valid range";
   return timestamp.seconds() * kNanosPerSecond + timestamp.nanos();
 }
 
 int64_t TimeUtil::TimestampToMicroseconds(const Timestamp& timestamp) {
-  GOOGLE_DCHECK(IsTimestampValid(timestamp))
+  GOOGLE_ABSL_DCHECK(IsTimestampValid(timestamp))
       << "Timestamp is outside of the valid range";
   return timestamp.seconds() * kMicrosPerSecond +
          RoundTowardZero(timestamp.nanos(), kNanosPerMicrosecond);
 }
 
 int64_t TimeUtil::TimestampToMilliseconds(const Timestamp& timestamp) {
-  GOOGLE_DCHECK(IsTimestampValid(timestamp))
+  GOOGLE_ABSL_DCHECK(IsTimestampValid(timestamp))
       << "Timestamp is outside of the valid range";
   return timestamp.seconds() * kMillisPerSecond +
          RoundTowardZero(timestamp.nanos(), kNanosPerMillisecond);
 }
 
 int64_t TimeUtil::TimestampToSeconds(const Timestamp& timestamp) {
-  GOOGLE_DCHECK(IsTimestampValid(timestamp))
+  GOOGLE_ABSL_DCHECK(IsTimestampValid(timestamp))
       << "Timestamp is outside of the valid range";
   return timestamp.seconds();
 }
@@ -443,7 +448,7 @@ using ::PROTOBUF_NAMESPACE_ID::util::CreateNormalized;
 using ::PROTOBUF_NAMESPACE_ID::util::kNanosPerSecond;
 
 // Convert a Duration to uint128.
-void ToUint128(const Duration& value, uint128* result, bool* negative) {
+void ToUint128(const Duration& value, absl::uint128* result, bool* negative) {
   if (value.seconds() < 0 || value.nanos() < 0) {
     *negative = true;
     *result = static_cast<uint64_t>(-value.seconds());
@@ -455,11 +460,11 @@ void ToUint128(const Duration& value, uint128* result, bool* negative) {
   }
 }
 
-void ToDuration(const uint128& value, bool negative, Duration* duration) {
+void ToDuration(const absl::uint128& value, bool negative, Duration* duration) {
   int64_t seconds =
-      static_cast<int64_t>(Uint128Low64(value / kNanosPerSecond));
+      static_cast<int64_t>(absl::Uint128Low64(value / kNanosPerSecond));
   int32_t nanos =
-      static_cast<int32_t>(Uint128Low64(value % kNanosPerSecond));
+      static_cast<int32_t>(absl::Uint128Low64(value % kNanosPerSecond));
   if (negative) {
     seconds = -seconds;
     nanos = -nanos;
@@ -483,7 +488,7 @@ Duration& operator-=(Duration& d1, const Duration& d2) {  // NOLINT
 
 Duration& operator*=(Duration& d, int64_t r) {  // NOLINT
   bool negative;
-  uint128 value;
+  absl::uint128 value;
   ToUint128(d, &value, &negative);
   if (r > 0) {
     value *= static_cast<uint64_t>(r);
@@ -512,7 +517,7 @@ Duration& operator*=(Duration& d, double r) {  // NOLINT
 
 Duration& operator/=(Duration& d, int64_t r) {  // NOLINT
   bool negative;
-  uint128 value;
+  absl::uint128 value;
   ToUint128(d, &value, &negative);
   if (r > 0) {
     value /= static_cast<uint64_t>(r);
@@ -530,10 +535,10 @@ Duration& operator/=(Duration& d, double r) {  // NOLINT
 
 Duration& operator%=(Duration& d1, const Duration& d2) {  // NOLINT
   bool negative1, negative2;
-  uint128 value1, value2;
+  absl::uint128 value1, value2;
   ToUint128(d1, &value1, &negative1);
   ToUint128(d2, &value2, &negative2);
-  uint128 result = value1 % value2;
+  absl::uint128 result = value1 % value2;
   // When negative values are involved in division, we round the division
   // result towards zero. With this semantics, sign of the remainder is the
   // same as the dividend. For example:
@@ -546,10 +551,10 @@ Duration& operator%=(Duration& d1, const Duration& d2) {  // NOLINT
 
 int64_t operator/(const Duration& d1, const Duration& d2) {
   bool negative1, negative2;
-  uint128 value1, value2;
+  absl::uint128 value1, value2;
   ToUint128(d1, &value1, &negative1);
   ToUint128(d2, &value2, &negative2);
-  int64_t result = Uint128Low64(value1 / value2);
+  int64_t result = absl::Uint128Low64(value1 / value2);
   if (negative1 != negative2) {
     result = -result;
   }

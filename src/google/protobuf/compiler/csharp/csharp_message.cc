@@ -28,33 +28,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/compiler/csharp/csharp_message.h>
+#include "google/protobuf/compiler/csharp/csharp_message.h"
 
 #include <algorithm>
-#include <map>
 #include <sstream>
 
-#include <google/protobuf/compiler/code_generator.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/wire_format.h>
-#include <google/protobuf/wire_format_lite.h>
-#include <google/protobuf/stubs/strutil.h>
-#include "absl/strings/ascii.h"
-#include "absl/strings/escaping.h"
-#include "absl/strings/str_replace.h"
-#include "absl/strings/str_split.h"
-#include <google/protobuf/compiler/csharp/csharp_doc_comment.h>
-#include <google/protobuf/compiler/csharp/csharp_enum.h>
-#include <google/protobuf/compiler/csharp/csharp_field_base.h>
-#include <google/protobuf/compiler/csharp/csharp_helpers.h>
-#include <google/protobuf/compiler/csharp/csharp_names.h>
-#include <google/protobuf/compiler/csharp/csharp_options.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/io/printer.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+#include "google/protobuf/compiler/code_generator.h"
+#include "absl/container/flat_hash_map.h"
+#include "google/protobuf/stubs/logging.h"
+#include "absl/strings/str_cat.h"
+#include "google/protobuf/compiler/csharp/csharp_doc_comment.h"
+#include "google/protobuf/compiler/csharp/csharp_enum.h"
+#include "google/protobuf/compiler/csharp/csharp_field_base.h"
+#include "google/protobuf/compiler/csharp/csharp_helpers.h"
+#include "google/protobuf/compiler/csharp/csharp_options.h"
+#include "google/protobuf/compiler/csharp/names.h"
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/io/printer.h"
+#include "google/protobuf/wire_format.h"
+#include "google/protobuf/wire_format_lite.h"
 
 // Must be last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -119,7 +115,7 @@ void MessageGenerator::AddSerializableAttribute(io::Printer* printer) {
 }
 
 void MessageGenerator::Generate(io::Printer* printer) {
-  std::map<std::string, std::string> vars;
+  absl::flat_hash_map<absl::string_view, std::string> vars;
   vars["class_name"] = class_name();
   vars["access_level"] = class_access_level();
 
@@ -381,7 +377,7 @@ bool MessageGenerator::HasNestedGeneratedTypes()
 }
 
 void MessageGenerator::GenerateCloningCode(io::Printer* printer) {
-  std::map<std::string, std::string> vars;
+  absl::flat_hash_map<absl::string_view, std::string> vars;
   WriteGeneratedCodeAttributes(printer);
   vars["class_name"] = class_name();
     printer->Print(
@@ -445,32 +441,30 @@ void MessageGenerator::GenerateFreezingCode(io::Printer* printer) {
 }
 
 void MessageGenerator::GenerateFrameworkMethods(io::Printer* printer) {
-    std::map<std::string, std::string> vars;
-    vars["class_name"] = class_name();
+  absl::flat_hash_map<absl::string_view, std::string> vars;
+  vars["class_name"] = class_name();
 
-    // Equality
-    WriteGeneratedCodeAttributes(printer);
-    printer->Print(
-        vars,
-        "public override bool Equals(object other) {\n"
-        "  return Equals(other as $class_name$);\n"
-        "}\n\n");
-    WriteGeneratedCodeAttributes(printer);
-    printer->Print(
-        vars,
-        "public bool Equals($class_name$ other) {\n"
-        "  if (ReferenceEquals(other, null)) {\n"
-        "    return false;\n"
-        "  }\n"
-        "  if (ReferenceEquals(other, this)) {\n"
-        "    return true;\n"
-        "  }\n");
-    printer->Indent();
-    for (int i = 0; i < descriptor_->field_count(); i++) {
-      std::unique_ptr<FieldGeneratorBase> generator(
-            CreateFieldGeneratorInternal(descriptor_->field(i)));
-        generator->WriteEquals(printer);
-    }
+  // Equality
+  WriteGeneratedCodeAttributes(printer);
+  printer->Print(vars,
+                 "public override bool Equals(object other) {\n"
+                 "  return Equals(other as $class_name$);\n"
+                 "}\n\n");
+  WriteGeneratedCodeAttributes(printer);
+  printer->Print(vars,
+                 "public bool Equals($class_name$ other) {\n"
+                 "  if (ReferenceEquals(other, null)) {\n"
+                 "    return false;\n"
+                 "  }\n"
+                 "  if (ReferenceEquals(other, this)) {\n"
+                 "    return true;\n"
+                 "  }\n");
+  printer->Indent();
+  for (int i = 0; i < descriptor_->field_count(); i++) {
+    std::unique_ptr<FieldGeneratorBase> generator(
+        CreateFieldGeneratorInternal(descriptor_->field(i)));
+    generator->WriteEquals(printer);
+  }
     for (int i = 0; i < descriptor_->real_oneof_decl_count(); i++) {
       printer->Print("if ($property_name$Case != other.$property_name$Case) return false;\n",
           "property_name", UnderscoresToCamelCase(descriptor_->oneof_decl(i)->name(), true));
@@ -612,7 +606,7 @@ void MessageGenerator::GenerateMergingMethods(io::Printer* printer) {
   // Note:  These are separate from GenerateMessageSerializationMethods()
   //   because they need to be generated even for messages that are optimized
   //   for code size.
-  std::map<std::string, std::string> vars;
+  absl::flat_hash_map<absl::string_view, std::string> vars;
   vars["class_name"] = class_name();
 
   WriteGeneratedCodeAttributes(printer);
@@ -692,7 +686,7 @@ void MessageGenerator::GenerateMergingMethods(io::Printer* printer) {
 }
 
 void MessageGenerator::GenerateMainParseLoop(io::Printer* printer, bool use_parse_context) {
-  std::map<std::string, std::string> vars;
+  absl::flat_hash_map<absl::string_view, std::string> vars;
   vars["maybe_ref_input"] = use_parse_context ? "ref input" : "input";
 
   printer->Print(
@@ -771,7 +765,8 @@ int MessageGenerator::GetPresenceIndex(const FieldDescriptor* descriptor) {
       index++;
     }
   }
-  GOOGLE_LOG(DFATAL)<< "Could not find presence index for field " << descriptor->name();
+  GOOGLE_ABSL_LOG(DFATAL) << "Could not find presence index for field "
+                   << descriptor->name();
   return -1;
 }
 
@@ -785,4 +780,4 @@ FieldGeneratorBase* MessageGenerator::CreateFieldGeneratorInternal(
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"

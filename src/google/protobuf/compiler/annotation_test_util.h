@@ -31,8 +31,8 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_ANNOTATION_TEST_UTIL_H__
 #define GOOGLE_PROTOBUF_COMPILER_ANNOTATION_TEST_UTIL_H__
 
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/testing/googletest.h>
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
 
 // Utilities that assist in writing tests for generator annotations.
@@ -58,7 +58,7 @@ struct ExpectedOutput {
 
 // Creates a file with name `filename` and content `data` in temp test
 // directory.
-void AddFile(const std::string& filename, const std::string& data);
+void AddFile(absl::string_view filename, absl::string_view data);
 
 // Runs proto compiler. Captures proto file structure in FileDescriptorProto.
 // Files will be generated in TestTempDir() folder. Callers of this
